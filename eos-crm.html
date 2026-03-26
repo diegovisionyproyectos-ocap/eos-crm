@@ -34,12 +34,41 @@
           <button class="tab" data-view="leads" type="button">Leads</button>
           <button class="tab" data-view="visits" type="button">Visitas + Mapa</button>
           <button class="tab" data-view="sellers" type="button">Vendedores</button>
+          <button class="tab tab-admin" data-view="users" type="button">Usuarios</button>
           <button class="tab" data-view="settings" type="button">Ajustes</button>
         </nav>
+        <div class="session-box">
+          <span id="sessionBadge" class="pill">Invitado</span>
+          <button id="logoutBtn" class="btn btn-secondary" type="button">Salir</button>
+        </div>
       </div>
     </header>
 
     <main class="container app">
+      <section id="authView" class="card auth-card">
+        <div class="card-head">
+          <div>
+            <h1>Ingreso al CRM EOS</h1>
+            <p class="muted">Roles: Super Admin y Vendedor.</p>
+          </div>
+        </div>
+        <form id="loginForm" class="form">
+          <label>
+            Email
+            <input id="loginEmail" class="input" type="email" placeholder="admin@eos.com" required />
+          </label>
+          <label>
+            Contraseña
+            <input id="loginPassword" class="input" type="password" placeholder="******" required />
+          </label>
+          <div class="full actions">
+            <button class="btn btn-primary" type="submit">Ingresar</button>
+          </div>
+          <p class="hint full">Usuario inicial: admin@eos.com / admin123</p>
+        </form>
+      </section>
+
+      <section id="appView" class="is-hidden">
       <section class="card view" data-view="dashboard">
         <div class="card-head">
           <div>
@@ -53,6 +82,17 @@
           <div class="panel">
             <h2>Actividad reciente</h2>
             <div id="recentActivity" class="list"></div>
+          </div>
+          <div class="panel">
+            <h2>Embudo de ventas</h2>
+            <canvas id="funnelChart" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h2>Visitas por vendedor</h2>
+            <canvas id="visitsChart" height="220"></canvas>
           </div>
           <div class="panel">
             <h2>Acciones rápidas</h2>
@@ -140,6 +180,17 @@
         <div id="sellersList" class="list"></div>
       </section>
 
+      <section class="card view is-hidden" data-view="users">
+        <div class="card-head">
+          <div>
+            <h2>Usuarios</h2>
+            <p class="muted">Solo Super Admin puede crear/editar usuarios.</p>
+          </div>
+          <button class="btn btn-primary" id="addUserBtn" type="button">Agregar usuario</button>
+        </div>
+        <div id="usersList" class="list"></div>
+      </section>
+
       <section class="card view is-hidden" data-view="settings">
         <div class="card-head">
           <div>
@@ -187,6 +238,7 @@
           </div>
         </div>
       </section>
+      </section>
     </main>
 
     <div id="modalRoot" class="modal-root" aria-live="polite"></div>
@@ -196,6 +248,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="eos-crm.js"></script>
   </body>
