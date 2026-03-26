@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/", "destination": "/eos-crm.html" }]
+}
