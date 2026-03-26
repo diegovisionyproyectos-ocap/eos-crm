@@ -1,16 +1,19 @@
 const STORAGE_KEY = "eos_crm_v1";
 const SUPABASE_CFG_KEY = "eos_supabase_cfg_v1";
 
+const DEFAULT_SB_URL = "https://rqgwhbzailzfffthaznp.supabase.co";
+const DEFAULT_SB_ANON_KEY = "sb_publishable_9gXQkDsguE8xBq3VgpjqCA_8vdpLPro";
+
 function loadSupabaseCfg() {
   const raw = localStorage.getItem(SUPABASE_CFG_KEY);
-  if (!raw) return { enabled: false, url: "", anonKey: "" };
+  if (!raw) return { enabled: true, url: DEFAULT_SB_URL, anonKey: DEFAULT_SB_ANON_KEY };
   const parsed = safeJsonParse(raw);
-  if (!parsed.ok) return { enabled: false, url: "", anonKey: "" };
+  if (!parsed.ok) return { enabled: true, url: DEFAULT_SB_URL, anonKey: DEFAULT_SB_ANON_KEY };
   const c = parsed.value ?? {};
   return {
     enabled: Boolean(c.enabled),
-    url: String(c.url ?? ""),
-    anonKey: String(c.anonKey ?? ""),
+    url: String(c.url ?? DEFAULT_SB_URL),
+    anonKey: String(c.anonKey ?? DEFAULT_SB_ANON_KEY),
   };
 }
 
