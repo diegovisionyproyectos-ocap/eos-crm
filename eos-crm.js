@@ -447,6 +447,51 @@ function openVisitModal(existing = null) {
 }
 function deleteVisit(id) { state.visits = state.visits.filter((v) => v.id !== id); saveState(); renderAll(); sbDelete("eos_visits", id).catch(() => {}); }
 
+function requestSellerLocation(user) {
+  if (!navigator.geolocation) return;
+  const root = qs("#modalRoot");
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.innerHTML = `
+    <div class="modal loc-modal">
+      <header><h3>Compartir ubicación</h3></header>
+      <div class="body">
+        <p>Hola <strong>${user.name}</strong>, para registrar tu jornada necesitamos tu ubicación actual.</p>
+        <p class="hint">Esto nos ayuda a trazar tu ruta de visitas del día.</p>
+        <div id="locStatus" class="pill" style="margin-top:8px">Esperando permiso…</div>
+      </div>
+      <div class="footer">
+        <button class="btn btn-secondary" id="locSkip">Omitir por ahora</button>
+        <button class="btn btn-primary" id="locAllow">Permitir ubicación</button>
+      </div>
+    </div>`;
+  root.appendChild(backdrop);
+
+  const status = backdrop.querySelector("#locStatus");
+
+  function close() { backdrop.remove(); }
+
+  backdrop.querySelector("#locSkip").addEventListener("click", close);
+
+  backdrop.querySelector("#locAllow").addEventListener("click", () => {
+    status.textContent = "Obteniendo ubicación…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        if (!state.ui.sellerLocations) state.ui.sellerLocations = {};
+        state.ui.sellerLocations[user.id] = { lat, lng, accuracy, at: nowISO() };
+        saveState();
+        status.textContent = `Ubicación registrada ✓ (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        setTimeout(close, 1200);
+      },
+      () => {
+        status.textContent = "No se pudo obtener la ubicación. Revisá los permisos del navegador.";
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  });
+}
+
 // events
 qsa(".tab").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 qs("#homeLink")?.addEventListener("click", (e) => { e.preventDefault(); setView("dashboard"); });
@@ -460,6 +505,7 @@ qs("#loginForm")?.addEventListener("submit", (e) => {
   const user = state.users.find((u) => u.email.toLowerCase() === email && u.password === pass && u.active);
   if (!user) return toast("Credenciales inválidas");
   state.sessionUserId = user.id; saveState(); setView("dashboard"); renderAll(); toast("Bienvenido");
+  requestSellerLocation(user);
 });
 qs("#addUserBtn")?.addEventListener("click", () => openUserModal());
 qs("#addSellerBtn")?.addEventListener("click", () => openSellerModal());
