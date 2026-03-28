@@ -6,6 +6,8 @@ let map = null;
 let visitMarkers = [];
 let heatLayer = null;
 let routeLines = [];
+let schoolMarkers = [];
+let showSchools = true;
 let mapMode = "markers";
 let pendingPick = null;
 
@@ -42,7 +44,7 @@ function createDefaultState() {
     leads: [],
     visits: [],
     activity: [],
-    ui: { lastMapCenter: { lat: 14.0723, lng: -87.1921, zoom: 12 } },
+    ui: { lastMapCenter: { lat: 13.6929, lng: -89.2182, zoom: 13 } },
   };
 }
 function normalizeState(s) {
@@ -315,11 +317,16 @@ function ensureMap() {
   const defaultCenter = userLoc
     ? { lat: userLoc.lat, lng: userLoc.lng, zoom: 13 }
     : saved?.zoom ? saved : null;
-  const fallback = { lat: 14.0723, lng: -87.1921, zoom: 12 }; // Tegucigalpa
+  const fallback = { lat: 13.6929, lng: -89.2182, zoom: 13 }; // San Salvador
   const c = defaultCenter || fallback;
   map = L.map(qs("#map")).setView([c.lat, c.lng], c.zoom || 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
-  map.on("moveend", () => { const center = map.getCenter(); state.ui.lastMapCenter = { lat: center.lat, lng: center.lng, zoom: map.getZoom() }; saveState(); });
+  map.on("moveend", () => {
+    const center = map.getCenter();
+    state.ui.lastMapCenter = { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+    saveState();
+    if (map.getZoom() >= 12) fetchNearbySchools();
+  });
   map.on("click", (ev) => { if (!pendingPick) return; const r = pendingPick; pendingPick = null; r({ lat: ev.latlng.lat, lng: ev.latlng.lng }); toast("Ubicación seleccionada"); });
   // If no saved center yet, try to auto-locate
   if (!defaultCenter && navigator.geolocation) {
@@ -327,12 +334,112 @@ function ensureMap() {
       map.setView([pos.coords.latitude, pos.coords.longitude], 13);
     }, null, { timeout: 5000 });
   }
+  setTimeout(() => fetchNearbySchools(), 800);
 }
 
 function clearMapLayers() {
   visitMarkers.forEach(m => m.remove()); visitMarkers = [];
   if (heatLayer) { heatLayer.remove(); heatLayer = null; }
   routeLines.forEach(l => l.remove()); routeLines = [];
+}
+
+function clearSchoolMarkers() {
+  schoolMarkers.forEach(m => m.remove()); schoolMarkers = [];
+}
+
+const schoolIcon = L.divIcon({
+  className: "",
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid #f59f00;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,.25)">🏫</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -12],
+});
+
+async function fetchNearbySchools() {
+  if (!map || !showSchools) return;
+  const b = map.getBounds();
+  const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+  const query = `[out:json][timeout:15];(node["amenity"="school"]["name"](${bbox});way["amenity"="school"]["name"](${bbox}););out center;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    clearSchoolMarkers();
+    data.elements.forEach(el => {
+      const lat = el.lat ?? el.center?.lat;
+      const lng = el.lon ?? el.center?.lon;
+      if (!lat || !lng) return;
+      const name = el.tags?.name || "Colegio";
+      const addr = [el.tags?.["addr:street"], el.tags?.["addr:housenumber"], el.tags?.["addr:city"]].filter(Boolean).join(", ");
+      const alreadyLead = state.leads.some(l => l.name.toLowerCase() === name.toLowerCase());
+      const popupHtml = `
+        <div class="map-popup">
+          <div class="mp-header" style="border-left:4px solid #f59f00">
+            <strong class="mp-name">${name}</strong>
+            ${alreadyLead ? `<span class="mp-stage" style="background:#20c99720;color:#20c997">Ya es lead</span>` : `<span class="mp-stage" style="background:#f59f0020;color:#c87f00">Sin lead</span>`}
+          </div>
+          ${addr ? `<div class="mp-row">📍 ${addr}</div>` : ""}
+          ${el.tags?.phone ? `<div class="mp-row">📞 <a href="tel:${el.tags.phone}">${el.tags.phone}</a></div>` : ""}
+          ${el.tags?.website ? `<div class="mp-row">🌐 <a href="${el.tags.website}" target="_blank">Sitio web</a></div>` : ""}
+          <div class="mp-divider"></div>
+          ${!alreadyLead ? `<button class="btn btn-primary mp-add-lead" style="width:100%;margin-top:4px"
+            data-name="${name.replace(/"/g,'&quot;')}"
+            data-addr="${addr.replace(/"/g,'&quot;')}"
+            data-lat="${lat}" data-lng="${lng}">+ Agregar como lead</button>` : ""}
+        </div>`;
+      const m = L.marker([lat, lng], { icon: schoolIcon }).addTo(map);
+      m.bindPopup(popupHtml, { maxWidth: 260 });
+      m.on("popupopen", () => {
+        setTimeout(() => {
+          qs(".mp-add-lead")?.addEventListener("click", (e) => {
+            const { name: n, addr: a, lat: la, lng: lo } = e.target.dataset;
+            openLeadFromSchool(n, a, parseFloat(la), parseFloat(lo));
+            m.closePopup();
+          });
+        }, 0);
+      });
+      schoolMarkers.push(m);
+    });
+    qs("#schoolCount") && (qs("#schoolCount").textContent = `${schoolMarkers.length} colegios`);
+  } catch { /* silencioso si falla overpass */ }
+}
+
+function openLeadFromSchool(name, address, lat, lng) {
+  openModal({
+    title: "Nuevo lead desde mapa",
+    bodyHTML: `<form class="form">
+      <label class="full">Institución<input class="input" name="name" value="${name}"></label>
+      <label class="full">Dirección<input class="input" name="address" value="${address}"></label>
+      <label>Ciudad<input class="input" name="city" value=""></label>
+      <label>Contacto<input class="input" name="contact" value=""></label>
+      <label>Teléfono<input class="input" name="phone" value=""></label>
+      <label>Email<input class="input" name="email" value=""></label>
+      <label>Etapa<select class="input" name="stage">
+        <option value="nuevo">Nuevo</option><option value="contactado">Contactado</option>
+        <option value="demo">Demo</option><option value="propuesta">Propuesta</option>
+        <option value="ganado">Ganado</option><option value="perdido">Perdido</option>
+      </select></label>
+      <label class="full">Vendedor<select class="input" name="ownerSellerId">
+        <option value="">Sin asignar</option>
+        ${state.sellers.map(s => `<option value="${s.id}">${s.name}</option>`).join("")}
+      </select></label>
+      <label class="full">Notas<textarea class="input" name="notes"></textarea></label>
+    </form>`,
+    onSave: async (m) => {
+      const fd = new FormData(qs("form", m));
+      const n = String(fd.get("name") || "").trim();
+      if (!n) return false;
+      const obj = { id: uid("lead"), createdAt: nowISO(), lat, lng,
+        name: n, address: String(fd.get("address") || ""), city: String(fd.get("city") || ""),
+        contact: String(fd.get("contact") || ""), phone: String(fd.get("phone") || ""),
+        email: String(fd.get("email") || ""), stage: String(fd.get("stage") || "nuevo"),
+        ownerSellerId: String(fd.get("ownerSellerId") || ""), notes: String(fd.get("notes") || "") };
+      state.leads.push(obj);
+      pushActivity("lead", `Lead desde mapa: ${n}`); saveState(); renderAll();
+      sbUpsert("eos_leads", { id: obj.id, name: obj.name, city: obj.city || null, contact: obj.contact || null, phone: obj.phone || null, email: obj.email || null, stage: obj.stage, owner_seller_id: obj.ownerSellerId || null, notes: obj.notes || null }).catch(() => {});
+      return true;
+    },
+  });
 }
 
 function renderVisitMarkers(visits) {
@@ -537,6 +644,12 @@ qsa(".map-mode-btn").forEach(btn => btn.addEventListener("click", () => {
   qsa(".map-mode-btn").forEach(b => b.classList.toggle("is-active", b === btn));
   renderVisitMarkers(filteredVisits());
 }));
+qs("#toggleSchoolsBtn")?.addEventListener("click", (e) => {
+  showSchools = !showSchools;
+  e.target.classList.toggle("is-active", showSchools);
+  if (showSchools) fetchNearbySchools();
+  else { clearSchoolMarkers(); qs("#schoolCount") && (qs("#schoolCount").textContent = ""); }
+});
 qs("#sbSaveBtn")?.addEventListener("click", () => { if (!canManageSettings()) return toast("Solo Super Admin"); sbCfg = { enabled: true, url: String(qs("#sbUrl").value || "").trim(), anonKey: String(qs("#sbAnonKey").value || "").trim() }; sb = null; saveSupabaseCfg(sbCfg); renderSupabaseStatus(); });
 qs("#sbDisconnectBtn")?.addEventListener("click", () => { sbCfg.enabled = false; saveSupabaseCfg(sbCfg); renderSupabaseStatus(); });
 qs("#sbTestBtn")?.addEventListener("click", async () => { try { const c = ensureSupabase(); if (!c) throw new Error("Sin config"); const { error } = await c.from("eos_sellers").select("id").limit(1); if (error) throw error; toast("Conexión OK"); } catch (e) { toast(`Error: ${e.message}`); } });
