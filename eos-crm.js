@@ -4,7 +4,16 @@ const DEFAULT_SB_URL = "https://rqgwhbzailzfffthaznp.supabase.co";
 const DEFAULT_SB_ANON_KEY = "sb_publishable_9gXQkDsguE8xBq3VgpjqCA_8vdpLPro";
 let map = null;
 let visitMarkers = [];
+let heatLayer = null;
+let routeLines = [];
+let mapMode = "markers";
 let pendingPick = null;
+
+const SELLER_COLORS = ["#3554d1","#e84545","#f59f00","#20c997","#9b59b6","#e67e22","#1abc9c","#e91e63"];
+function sellerColor(sellerId) {
+  const idx = state?.sellers?.findIndex(s => s.id === sellerId) ?? -1;
+  return SELLER_COLORS[idx >= 0 ? idx % SELLER_COLORS.length : 0];
+}
 let funnelChart = null;
 let visitsChart = null;
 
@@ -303,18 +312,82 @@ function ensureMap() {
   map.on("moveend", () => { const center = map.getCenter(); state.ui.lastMapCenter = { lat: center.lat, lng: center.lng, zoom: map.getZoom() }; saveState(); });
   map.on("click", (ev) => { if (!pendingPick) return; const r = pendingPick; pendingPick = null; r({ lat: ev.latlng.lat, lng: ev.latlng.lng }); toast("Ubicación seleccionada"); });
 }
-function renderVisitMarkers(visits) {
-  ensureMap(); if (!map) return; visitMarkers.forEach((m) => m.remove()); visitMarkers = [];
-  visits.forEach((v) => { if (typeof v.lat !== "number" || typeof v.lng !== "number") return; const s = byId(state.sellers, v.sellerId); const l = byId(state.leads, v.leadId); const m = L.marker([v.lat, v.lng]).addTo(map); m.bindPopup(`<b>${s?.name || "Vendedor"} · ${l?.name || "Lead"}</b><br/>${fmtDateTime(v.at)}<br/>${v.notes || ""}`); visitMarkers.push(m); });
+
+function clearMapLayers() {
+  visitMarkers.forEach(m => m.remove()); visitMarkers = [];
+  if (heatLayer) { heatLayer.remove(); heatLayer = null; }
+  routeLines.forEach(l => l.remove()); routeLines = [];
 }
-function fitMapToVisits(vs) { ensureMap(); const pts = vs.filter((v) => typeof v.lat === "number" && typeof v.lng === "number").map((v) => [v.lat, v.lng]); if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2)); }
+
+function renderVisitMarkers(visits) {
+  ensureMap(); if (!map) return;
+  clearMapLayers();
+  if (mapMode === "markers") _renderMarkers(visits);
+  else if (mapMode === "routes") _renderRoutes(visits);
+  else if (mapMode === "heat") _renderHeat(visits);
+  _renderLegend();
+}
+
+function _renderMarkers(visits) {
+  visits.forEach(v => {
+    if (typeof v.lat !== "number" || typeof v.lng !== "number") return;
+    const s = byId(state.sellers, v.sellerId);
+    const l = byId(state.leads, v.leadId);
+    const color = sellerColor(v.sellerId);
+    const m = L.circleMarker([v.lat, v.lng], { radius: 9, fillColor: color, color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(map);
+    m.bindPopup(`<div style="min-width:180px"><strong>${l?.name || "Colegio"}</strong><br/><span style="color:#5d6c8f;font-size:12px">Etapa: ${stageLabel(l?.stage)}</span><br/><span style="color:#5d6c8f;font-size:12px">Vendedor: ${s?.name || "—"}</span><br/><span style="color:#5d6c8f;font-size:12px">${fmtDateTime(v.at)}</span>${v.notes ? `<br/><span style="font-size:12px">${v.notes}</span>` : ""}${l?.address ? `<br/><span style="font-size:12px">📍 ${l.address}</span>` : ""}</div>`);
+    visitMarkers.push(m);
+  });
+}
+
+function _renderRoutes(visits) {
+  _renderMarkers(visits);
+  const bySeller = {};
+  [...visits].filter(v => typeof v.lat === "number" && typeof v.lng === "number")
+    .sort((a, b) => new Date(a.at) - new Date(b.at))
+    .forEach(v => { (bySeller[v.sellerId] = bySeller[v.sellerId] || []).push([v.lat, v.lng]); });
+  Object.entries(bySeller).forEach(([sid, pts]) => {
+    if (pts.length < 2) return;
+    const line = L.polyline(pts, { color: sellerColor(sid), weight: 3, opacity: 0.75, dashArray: "6 5" }).addTo(map);
+    routeLines.push(line);
+  });
+}
+
+function _renderHeat(visits) {
+  const pts = visits.filter(v => typeof v.lat === "number" && typeof v.lng === "number").map(v => [v.lat, v.lng, 1.0]);
+  if (pts.length && window.L?.heatLayer) {
+    heatLayer = L.heatLayer(pts, { radius: 30, blur: 20, maxZoom: 17, gradient: { 0.3: "#4f7cff", 0.6: "#f59f00", 1.0: "#d53d55" } }).addTo(map);
+  }
+}
+
+function _renderLegend() {
+  const root = qs("#mapLegend"); if (!root) return;
+  if (mapMode === "heat") {
+    root.innerHTML = `<div class="legend-heat"><span class="legend-gradient"></span><span class="legend-label">Baja → Alta densidad</span></div>`;
+    return;
+  }
+  root.innerHTML = state.sellers.map((s, i) => `<div class="legend-item"><span class="legend-dot" style="background:${SELLER_COLORS[i % SELLER_COLORS.length]}"></span>${s.name}</div>`).join("");
+}
+
+function fitMapToVisits(vs) {
+  ensureMap();
+  const pts = vs.filter(v => typeof v.lat === "number" && typeof v.lng === "number").map(v => [v.lat, v.lng]);
+  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2));
+}
 function pickPointOnMap() { setView("visits"); return new Promise((resolve, reject) => { pendingPick = resolve; setTimeout(() => { if (pendingPick) { pendingPick = null; reject(new Error("Tiempo agotado")); } }, 20000); }); }
 function getGeo() { return new Promise((res, rej) => navigator.geolocation?.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy }), rej, { enableHighAccuracy: true, timeout: 12000 })); }
+async function geocodeAddress(address) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": "es" } });
+  const data = await res.json();
+  if (!data.length) throw new Error("No se encontró la dirección");
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+}
 
 function openVisitModal(existing = null) {
   openModal({
     title: existing ? "Editar visita" : "Nueva visita",
-    bodyHTML: `<form class="form"><label class="full">Vendedor<select class="input" name="sellerId">${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Lead<select class="input" name="leadId">${state.leads.map((l) => `<option value="${l.id}">${l.name}</option>`).join("")}</select></label><label>Fecha<input class="input" type="datetime-local" name="at" value="${(existing?.at || nowISO()).slice(0,16)}"></label><label>Tipo<select class="input" name="kind"><option value="visita">Visita</option><option value="llamada">Llamada</option><option value="demo">Demo</option></select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label><div class="full actions"><button class="btn btn-secondary gps" type="button">Usar GPS</button><button class="btn btn-secondary mapPick" type="button">Elegir en mapa</button><span class="pill loc">Sin ubicación</span></div></form>`,
+    bodyHTML: `<form class="form"><label class="full">Vendedor<select class="input" name="sellerId">${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Lead<select class="input" name="leadId">${state.leads.map((l) => `<option value="${l.id}">${l.name}</option>`).join("")}</select></label><label>Fecha<input class="input" type="datetime-local" name="at" value="${(existing?.at || nowISO()).slice(0,16)}"></label><label>Tipo<select class="input" name="kind"><option value="visita">Visita</option><option value="llamada">Llamada</option><option value="demo">Demo</option></select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label><div class="full addr-row"><input class="input addrInput" placeholder="Dirección exacta (ej: Calle 45 #12-34, Bogotá)" style="flex:1" /><button class="btn btn-secondary addrSearch" type="button">Buscar dirección</button></div><div class="full actions"><button class="btn btn-secondary gps" type="button">Usar GPS</button><button class="btn btn-secondary mapPick" type="button">Elegir en mapa</button><span class="pill loc">Sin ubicación</span></div></form>`,
     onSave: async (m) => {
       const fd = new FormData(qs("form", m)); const obj = existing || { id: uid("visit"), createdAt: nowISO(), lat: null, lng: null, accuracyM: null };
       Object.assign(obj, { sellerId: String(fd.get("sellerId") || ""), leadId: String(fd.get("leadId") || ""), at: new Date(String(fd.get("at") || nowISO())).toISOString(), kind: String(fd.get("kind") || "visita"), notes: String(fd.get("notes") || "") });
@@ -332,6 +405,18 @@ function openVisitModal(existing = null) {
     let lat = existing?.lat ?? null; let lng = existing?.lng ?? null; let acc = existing?.accuracyM ?? null; setLoc(lat, lng);
     qs(".gps", modal).addEventListener("click", async () => { try { const g = await getGeo(); lat = g.lat; lng = g.lng; acc = g.accuracyM; if (existing) Object.assign(existing, { lat, lng, accuracyM: acc }); setLoc(lat, lng); } catch { toast("No se pudo obtener GPS"); } });
     qs(".mapPick", modal).addEventListener("click", async () => { try { const p = await pickPointOnMap(); lat = p.lat; lng = p.lng; acc = null; if (existing) Object.assign(existing, { lat, lng, accuracyM: acc }); setLoc(lat, lng); } catch {} });
+    qs(".addrSearch", modal)?.addEventListener("click", async () => {
+      const addr = qs(".addrInput", modal)?.value?.trim();
+      if (!addr) return toast("Escribí una dirección");
+      try {
+        toast("Buscando…");
+        const g = await geocodeAddress(addr);
+        lat = g.lat; lng = g.lng; acc = null;
+        if (existing) Object.assign(existing, { lat, lng, accuracyM: null });
+        setLoc(lat, lng);
+        toast("Dirección encontrada");
+      } catch { toast("No se encontró la dirección"); }
+    });
     qs(".save", modal.parentElement).addEventListener("click", () => { if (!existing) { const v = state.visits[0]; if (v) Object.assign(v, { lat, lng, accuracyM: acc }); } saveState(); });
   }, 0);
 }
@@ -363,6 +448,11 @@ qs("#leadStageFilter")?.addEventListener("change", renderLeads);
 qs("#visitSellerFilter")?.addEventListener("change", renderVisits);
 qs("#visitTextFilter")?.addEventListener("input", renderVisits);
 qs("#fitMapBtn")?.addEventListener("click", () => fitMapToVisits(filteredVisits()));
+qsa(".map-mode-btn").forEach(btn => btn.addEventListener("click", () => {
+  mapMode = btn.dataset.mode;
+  qsa(".map-mode-btn").forEach(b => b.classList.toggle("is-active", b === btn));
+  renderVisitMarkers(filteredVisits());
+}));
 qs("#sbSaveBtn")?.addEventListener("click", () => { if (!canManageSettings()) return toast("Solo Super Admin"); sbCfg = { enabled: true, url: String(qs("#sbUrl").value || "").trim(), anonKey: String(qs("#sbAnonKey").value || "").trim() }; sb = null; saveSupabaseCfg(sbCfg); renderSupabaseStatus(); });
 qs("#sbDisconnectBtn")?.addEventListener("click", () => { sbCfg.enabled = false; saveSupabaseCfg(sbCfg); renderSupabaseStatus(); });
 qs("#sbTestBtn")?.addEventListener("click", async () => { try { const c = ensureSupabase(); if (!c) throw new Error("Sin config"); const { error } = await c.from("eos_sellers").select("id").limit(1); if (error) throw error; toast("Conexión OK"); } catch (e) { toast(`Error: ${e.message}`); } });

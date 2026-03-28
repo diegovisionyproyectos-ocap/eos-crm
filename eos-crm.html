@@ -155,12 +155,18 @@
             <div id="visitsList" class="list"></div>
           </div>
           <div class="panel">
+            <div class="map-mode-bar">
+              <button class="btn btn-secondary map-mode-btn is-active" data-mode="markers" type="button">Marcadores</button>
+              <button class="btn btn-secondary map-mode-btn" data-mode="routes" type="button">Rutas</button>
+              <button class="btn btn-secondary map-mode-btn" data-mode="heat" type="button">Calor</button>
+            </div>
             <div class="map-wrap">
               <div id="map" class="map" aria-label="Mapa de visitas"></div>
               <div class="map-overlay">
                 <button class="btn btn-secondary" id="fitMapBtn" type="button">Ver todo</button>
               </div>
             </div>
+            <div id="mapLegend" class="map-legend"></div>
             <p class="hint">
               Tip: puedes registrar una visita usando tu GPS o seleccionando un punto en el mapa.
             </p>
@@ -247,6 +253,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="eos-crm.js"></script>
