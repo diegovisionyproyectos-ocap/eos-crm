@@ -7,6 +7,8 @@ let visitMarkers = [];
 let heatLayer = null;
 let routeLines = [];
 let schoolMarkers = [];
+let sellerLocMarkers = [];
+let myLocMarker = null;
 let showSchools = true;
 let mapMode = "markers";
 let pendingPick = null;
@@ -125,7 +127,7 @@ function setView(view) {
   document.body.classList.remove("nav-open");
   if (view === "visits") {
     ensureMap();
-    setTimeout(() => map && map.invalidateSize(), 50);
+    setTimeout(() => { map && map.invalidateSize(); renderSellerLocations(); }, 50);
   }
   renderAll();
 }
@@ -294,11 +296,12 @@ function deleteSeller(id) {
 function openLeadModal(existing = null) {
   openModal({
     title: existing ? "Editar lead" : "Nuevo lead",
-    bodyHTML: `<form class="form"><label class="full">Institución<input class="input" name="name" value="${existing?.name || ""}"></label><label>Ciudad<input class="input" name="city" value="${existing?.city || ""}"></label><label class="full">Dirección exacta<input class="input" name="address" value="${existing?.address || ""}" placeholder="Ej: Cra 7 #45-23, Bogotá"></label><label>Contacto<input class="input" name="contact" value="${existing?.contact || ""}"></label><label>Teléfono<input class="input" name="phone" value="${existing?.phone || ""}"></label><label>Email<input class="input" name="email" value="${existing?.email || ""}"></label><label>Etapa<select class="input" name="stage"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="demo">Demo</option><option value="propuesta">Propuesta</option><option value="ganado">Ganado</option><option value="perdido">Perdido</option></select></label><label class="full">Vendedor<select class="input" name="ownerSellerId"><option value="">Sin asignar</option>${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label></form>`,
+    bodyHTML: `<form class="form"><label class="full">Institución<input class="input" name="name" value="${existing?.name || ""}"></label><label>Ciudad<input class="input" name="city" value="${existing?.city || ""}"></label><label class="full">Dirección exacta<input class="input" name="address" value="${existing?.address || ""}" placeholder="Ej: Cra 7 #45-23, San Salvador"></label><label>Contacto<input class="input" name="contact" value="${existing?.contact || ""}"></label><label>Teléfono<input class="input" name="phone" value="${existing?.phone || ""}"></label><label>Email<input class="input" name="email" value="${existing?.email || ""}"></label><label>N° estudiantes<input class="input" type="number" name="students" min="0" value="${existing?.students || ""}" placeholder="Ej: 450"></label><label>Etapa<select class="input" name="stage"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="demo">Demo</option><option value="propuesta">Propuesta</option><option value="ganado">Ganado</option><option value="perdido">Perdido</option></select></label><label class="full">Vendedor<select class="input" name="ownerSellerId"><option value="">Sin asignar</option>${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label></form>`,
     onSave: async (m) => {
       const f = qs("form", m); const fd = new FormData(f); const name = String(fd.get("name") || "").trim(); if (!name) return false;
       const obj = existing || { id: uid("lead"), createdAt: nowISO() };
-      Object.assign(obj, { name, city: String(fd.get("city") || ""), address: String(fd.get("address") || ""), contact: String(fd.get("contact") || ""), phone: String(fd.get("phone") || ""), email: String(fd.get("email") || ""), stage: String(fd.get("stage") || "nuevo"), ownerSellerId: String(fd.get("ownerSellerId") || ""), notes: String(fd.get("notes") || "") });
+      const students = parseInt(fd.get("students") || "0") || 0;
+      Object.assign(obj, { name, city: String(fd.get("city") || ""), address: String(fd.get("address") || ""), contact: String(fd.get("contact") || ""), phone: String(fd.get("phone") || ""), email: String(fd.get("email") || ""), students, stage: String(fd.get("stage") || "nuevo"), ownerSellerId: String(fd.get("ownerSellerId") || ""), notes: String(fd.get("notes") || "") });
       if (!existing) state.leads.push(obj);
       pushActivity("lead", `${existing ? "Actualizado" : "Creado"} lead: ${name}`); saveState(); renderAll();
       sbUpsert("eos_leads", { id: obj.id, name: obj.name, city: obj.city || null, contact: obj.contact || null, phone: obj.phone || null, email: obj.email || null, stage: obj.stage, owner_seller_id: obj.ownerSellerId || null, notes: obj.notes || null }).catch(() => {});
@@ -334,7 +337,7 @@ function ensureMap() {
       map.setView([pos.coords.latitude, pos.coords.longitude], 13);
     }, null, { timeout: 5000 });
   }
-  setTimeout(() => fetchNearbySchools(), 800);
+  setTimeout(() => { fetchNearbySchools(); renderSellerLocations(); }, 800);
 }
 
 function clearMapLayers() {
@@ -345,6 +348,36 @@ function clearMapLayers() {
 
 function clearSchoolMarkers() {
   schoolMarkers.forEach(m => m.remove()); schoolMarkers = [];
+}
+
+function renderSellerLocations() {
+  if (!map) return;
+  sellerLocMarkers.forEach(m => m.remove()); sellerLocMarkers = [];
+  if (myLocMarker) { myLocMarker.remove(); myLocMarker = null; }
+  const me = currentUser();
+  const locs = state.ui.sellerLocations || {};
+  Object.entries(locs).forEach(([userId, loc]) => {
+    if (!loc?.lat || !loc?.lng) return;
+    const user = byId(state.users, userId);
+    if (!user) return;
+    const isMe = userId === me?.id;
+    const color = isMe ? "#3554d1" : sellerColor(userId);
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="position:relative">
+        <div style="width:32px;height:32px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:15px">${isMe ? "📍" : "🧑‍💼"}</div>
+        <div style="position:absolute;top:34px;left:50%;transform:translateX(-50%);background:${color};color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2)">${isMe ? "Yo" : user.name.split(" ")[0]}</div>
+      </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -20],
+    });
+    const ago = loc.at ? ` · ${fmtDateTime(loc.at)}` : "";
+    const popup = `<div class="map-popup"><div class="mp-header" style="border-left:4px solid ${color}"><strong class="mp-name">${user.name}</strong><span class="mp-stage" style="background:${color}20;color:${color}">${isMe ? "Tú" : user.role === "super_admin" ? "Admin" : "Vendedor"}</span></div><div class="mp-row">📍 ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}</div><div class="mp-row">🕐 Último ingreso${ago}</div></div>`;
+    const m = L.marker([loc.lat, loc.lng], { icon, zIndexOffset: isMe ? 1000 : 500 }).addTo(map);
+    m.bindPopup(popup, { maxWidth: 240 });
+    if (isMe) myLocMarker = m; else sellerLocMarkers.push(m);
+  });
 }
 
 const schoolIcon = L.divIcon({
@@ -473,6 +506,7 @@ function _renderMarkers(visits) {
         ${l?.phone ? `<div class="mp-row">📞 <a href="tel:${l.phone}">${l.phone}</a></div>` : ""}
         ${l?.email ? `<div class="mp-row">✉️ <a href="mailto:${l.email}">${l.email}</a></div>` : ""}
         <div class="mp-divider"></div>
+        ${l?.students ? `<div class="mp-row">🎓 Estudiantes: <strong>${l.students.toLocaleString()}</strong></div>` : ""}
         <div class="mp-row">🧑‍💼 Vendedor: <strong>${s?.name || "Sin asignar"}</strong></div>
         <div class="mp-row">📋 Visitas: <strong>${leadVisits.length}</strong></div>
         ${lastVisit ? `<div class="mp-row">🕐 Última: ${fmtDateTime(lastVisit.at)}</div>` : ""}
@@ -485,8 +519,26 @@ function _renderMarkers(visits) {
   });
 }
 
+function haversineKm(a, b) {
+  const R = 6371, dLat = (b[0]-a[0])*Math.PI/180, dLng = (b[1]-a[1])*Math.PI/180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function nearestNeighborRoute(start, points) {
+  const remaining = [...points]; const route = [];
+  let cur = start;
+  while (remaining.length) {
+    let best = 0, bestDist = Infinity;
+    remaining.forEach((p, i) => { const d = haversineKm(cur, p); if (d < bestDist) { bestDist = d; best = i; } });
+    route.push(remaining[best]); cur = remaining[best]; remaining.splice(best, 1);
+  }
+  return route;
+}
+
 function _renderRoutes(visits) {
   _renderMarkers(visits);
+  // Historical routes (visited)
   const bySeller = {};
   [...visits].filter(v => typeof v.lat === "number" && typeof v.lng === "number")
     .sort((a, b) => new Date(a.at) - new Date(b.at))
@@ -495,6 +547,40 @@ function _renderRoutes(visits) {
     if (pts.length < 2) return;
     const line = L.polyline(pts, { color: sellerColor(sid), weight: 3, opacity: 0.75, dashArray: "6 5" }).addTo(map);
     routeLines.push(line);
+  });
+
+  // Suggested route for current user: unvisited assigned leads with coordinates
+  const me = currentUser();
+  if (!me) return;
+  const myLoc = state.ui.sellerLocations?.[me.id];
+  const mySellerId = me.id;
+  const visitedLeadIds = new Set(state.visits.filter(v => v.sellerId === mySellerId).map(v => v.leadId));
+  const pendingLeads = state.leads.filter(l =>
+    l.ownerSellerId === mySellerId &&
+    !visitedLeadIds.has(l.id) &&
+    typeof l.lat === "number" && typeof l.lng === "number"
+  );
+  if (pendingLeads.length < 1) return;
+  const start = myLoc ? [myLoc.lat, myLoc.lng] : null;
+  const points = pendingLeads.map(l => [l.lat, l.lng, l]);
+  const pts2d = points.map(p => [p[0], p[1]]);
+  const ordered = start ? nearestNeighborRoute(start, pts2d) : pts2d;
+  const fullRoute = start ? [start, ...ordered] : ordered;
+  if (fullRoute.length < 2) return;
+  const sugLine = L.polyline(fullRoute, { color: "#20c997", weight: 4, opacity: 0.9, dashArray: "10 6" }).addTo(map);
+  sugLine.bindTooltip("Ruta sugerida para hoy", { sticky: true });
+  routeLines.push(sugLine);
+  // Number the stops
+  ordered.forEach((pt, i) => {
+    const stopIcon = L.divIcon({
+      className: "",
+      html: `<div style="width:20px;height:20px;border-radius:50%;background:#20c997;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)">${i+1}</div>`,
+      iconSize: [20,20], iconAnchor: [10,10],
+    });
+    const lead = pendingLeads.find(l => l.lat === pt[0] && l.lng === pt[1]);
+    const m = L.marker(pt, { icon: stopIcon, zIndexOffset: 200 }).addTo(map);
+    if (lead) m.bindPopup(`<div class="map-popup"><div class="mp-header" style="border-left:4px solid #20c997"><strong class="mp-name">Parada ${i+1}: ${lead.name}</strong></div>${lead.address ? `<div class="mp-row">📍 ${lead.address}</div>` : ""}${lead.students ? `<div class="mp-row">🎓 ${lead.students.toLocaleString()} estudiantes</div>` : ""}<div class="mp-row"><span class="mp-stage" style="background:#20c99720;color:#20c997">Sin visitar</span></div></div>`, { maxWidth: 240 });
+    routeLines.push(m);
   });
 }
 
@@ -601,6 +687,8 @@ function requestSellerLocation(user) {
         if (!state.ui.sellerLocations) state.ui.sellerLocations = {};
         state.ui.sellerLocations[user.id] = { lat, lng, accuracy, at: nowISO() };
         saveState();
+        renderSellerLocations();
+        if (map) map.setView([lat, lng], Math.max(map.getZoom(), 14));
         status.textContent = `Ubicación registrada ✓ (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
         setTimeout(close, 1200);
       },
