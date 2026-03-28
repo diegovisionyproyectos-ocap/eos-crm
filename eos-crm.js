@@ -121,7 +121,10 @@ function setView(view) {
   qsa(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.view === view));
   qsa(".view").forEach((v) => v.classList.toggle("is-hidden", v.dataset.view !== view));
   document.body.classList.remove("nav-open");
-  if (view === "visits") ensureMap();
+  if (view === "visits") {
+    ensureMap();
+    setTimeout(() => map && map.invalidateSize(), 50);
+  }
   renderAll();
 }
 
@@ -289,11 +292,11 @@ function deleteSeller(id) {
 function openLeadModal(existing = null) {
   openModal({
     title: existing ? "Editar lead" : "Nuevo lead",
-    bodyHTML: `<form class="form"><label class="full">Institución<input class="input" name="name" value="${existing?.name || ""}"></label><label>Ciudad<input class="input" name="city" value="${existing?.city || ""}"></label><label>Contacto<input class="input" name="contact" value="${existing?.contact || ""}"></label><label>Teléfono<input class="input" name="phone" value="${existing?.phone || ""}"></label><label>Email<input class="input" name="email" value="${existing?.email || ""}"></label><label>Etapa<select class="input" name="stage"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="demo">Demo</option><option value="propuesta">Propuesta</option><option value="ganado">Ganado</option><option value="perdido">Perdido</option></select></label><label class="full">Vendedor<select class="input" name="ownerSellerId"><option value="">Sin asignar</option>${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label></form>`,
+    bodyHTML: `<form class="form"><label class="full">Institución<input class="input" name="name" value="${existing?.name || ""}"></label><label>Ciudad<input class="input" name="city" value="${existing?.city || ""}"></label><label class="full">Dirección exacta<input class="input" name="address" value="${existing?.address || ""}" placeholder="Ej: Cra 7 #45-23, Bogotá"></label><label>Contacto<input class="input" name="contact" value="${existing?.contact || ""}"></label><label>Teléfono<input class="input" name="phone" value="${existing?.phone || ""}"></label><label>Email<input class="input" name="email" value="${existing?.email || ""}"></label><label>Etapa<select class="input" name="stage"><option value="nuevo">Nuevo</option><option value="contactado">Contactado</option><option value="demo">Demo</option><option value="propuesta">Propuesta</option><option value="ganado">Ganado</option><option value="perdido">Perdido</option></select></label><label class="full">Vendedor<select class="input" name="ownerSellerId"><option value="">Sin asignar</option>${state.sellers.map((s) => `<option value="${s.id}">${s.name}</option>`).join("")}</select></label><label class="full">Notas<textarea class="input" name="notes">${existing?.notes || ""}</textarea></label></form>`,
     onSave: async (m) => {
       const f = qs("form", m); const fd = new FormData(f); const name = String(fd.get("name") || "").trim(); if (!name) return false;
       const obj = existing || { id: uid("lead"), createdAt: nowISO() };
-      Object.assign(obj, { name, city: String(fd.get("city") || ""), contact: String(fd.get("contact") || ""), phone: String(fd.get("phone") || ""), email: String(fd.get("email") || ""), stage: String(fd.get("stage") || "nuevo"), ownerSellerId: String(fd.get("ownerSellerId") || ""), notes: String(fd.get("notes") || "") });
+      Object.assign(obj, { name, city: String(fd.get("city") || ""), address: String(fd.get("address") || ""), contact: String(fd.get("contact") || ""), phone: String(fd.get("phone") || ""), email: String(fd.get("email") || ""), stage: String(fd.get("stage") || "nuevo"), ownerSellerId: String(fd.get("ownerSellerId") || ""), notes: String(fd.get("notes") || "") });
       if (!existing) state.leads.push(obj);
       pushActivity("lead", `${existing ? "Actualizado" : "Creado"} lead: ${name}`); saveState(); renderAll();
       sbUpsert("eos_leads", { id: obj.id, name: obj.name, city: obj.city || null, contact: obj.contact || null, phone: obj.phone || null, email: obj.email || null, stage: obj.stage, owner_seller_id: obj.ownerSellerId || null, notes: obj.notes || null }).catch(() => {});
@@ -334,8 +337,30 @@ function _renderMarkers(visits) {
     const s = byId(state.sellers, v.sellerId);
     const l = byId(state.leads, v.leadId);
     const color = sellerColor(v.sellerId);
+    const leadVisits = state.visits.filter(x => x.leadId === l?.id).sort((a, b) => new Date(b.at) - new Date(a.at));
+    const lastVisit = leadVisits[0];
+    const stageColors = { nuevo:"#5d6c8f", contactado:"#3554d1", demo:"#f59f00", propuesta:"#9b59b6", ganado:"#20c997", perdido:"#d53d55" };
+    const sc = stageColors[l?.stage] || "#5d6c8f";
+    const popup = `
+      <div class="map-popup">
+        <div class="mp-header" style="border-left:4px solid ${color}">
+          <strong class="mp-name">${l?.name || "Colegio"}</strong>
+          <span class="mp-stage" style="background:${sc}20;color:${sc}">${stageLabel(l?.stage)}</span>
+        </div>
+        ${l?.address ? `<div class="mp-row">📍 ${l.address}</div>` : ""}
+        ${l?.city ? `<div class="mp-row">🏙️ ${l.city}</div>` : ""}
+        ${l?.contact ? `<div class="mp-row">👤 ${l.contact}</div>` : ""}
+        ${l?.phone ? `<div class="mp-row">📞 <a href="tel:${l.phone}">${l.phone}</a></div>` : ""}
+        ${l?.email ? `<div class="mp-row">✉️ <a href="mailto:${l.email}">${l.email}</a></div>` : ""}
+        <div class="mp-divider"></div>
+        <div class="mp-row">🧑‍💼 Vendedor: <strong>${s?.name || "Sin asignar"}</strong></div>
+        <div class="mp-row">📋 Visitas: <strong>${leadVisits.length}</strong></div>
+        ${lastVisit ? `<div class="mp-row">🕐 Última: ${fmtDateTime(lastVisit.at)}</div>` : ""}
+        ${lastVisit?.notes ? `<div class="mp-row mp-notes">"${lastVisit.notes}"</div>` : ""}
+        ${l?.notes ? `<div class="mp-row mp-notes">📝 ${l.notes}</div>` : ""}
+      </div>`;
     const m = L.circleMarker([v.lat, v.lng], { radius: 9, fillColor: color, color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(map);
-    m.bindPopup(`<div style="min-width:180px"><strong>${l?.name || "Colegio"}</strong><br/><span style="color:#5d6c8f;font-size:12px">Etapa: ${stageLabel(l?.stage)}</span><br/><span style="color:#5d6c8f;font-size:12px">Vendedor: ${s?.name || "—"}</span><br/><span style="color:#5d6c8f;font-size:12px">${fmtDateTime(v.at)}</span>${v.notes ? `<br/><span style="font-size:12px">${v.notes}</span>` : ""}${l?.address ? `<br/><span style="font-size:12px">📍 ${l.address}</span>` : ""}</div>`);
+    m.bindPopup(popup, { maxWidth: 280, className: "map-popup-wrap" });
     visitMarkers.push(m);
   });
 }

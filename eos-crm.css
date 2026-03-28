@@ -74,6 +74,14 @@ h1,h2,h3 { margin: 0; }
 .legend-heat { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .legend-gradient { display: inline-block; width: 80px; height: 10px; border-radius: 999px; background: linear-gradient(to right, #4f7cff, #f59f00, #d53d55); }
 .addr-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.map-popup { font-family: "Inter", sans-serif; font-size: 13px; line-height: 1.5; min-width: 220px; max-width: 270px; }
+.mp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding-left: 8px; margin-bottom: 6px; }
+.mp-name { font-size: 14px; font-weight: 800; color: #1b2845; }
+.mp-stage { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.mp-row { color: #5d6c8f; margin: 2px 0; }
+.mp-row a { color: #3554d1; text-decoration: none; }
+.mp-notes { font-style: italic; color: #8a96b0; }
+.mp-divider { border-top: 1px solid #d8e1f5; margin: 6px 0; }
 .file-btn input { display: none; }
 
 @media (max-width: 980px) {
