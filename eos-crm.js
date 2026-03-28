@@ -42,7 +42,7 @@ function createDefaultState() {
     leads: [],
     visits: [],
     activity: [],
-    ui: { lastMapCenter: { lat: 4.711, lng: -74.0721, zoom: 12 } },
+    ui: { lastMapCenter: { lat: 14.0723, lng: -87.1921, zoom: 12 } },
   };
 }
 function normalizeState(s) {
@@ -309,11 +309,24 @@ function deleteLead(id) { if (state.visits.some((v) => v.leadId === id)) return 
 
 function ensureMap() {
   if (map || !qs("#map")) return;
-  const c = state.ui.lastMapCenter || { lat: 4.711, lng: -74.0721, zoom: 12 };
+  // Use saved center, or current user's login location, or browser geolocation
+  const userLoc = currentUser() && state.ui.sellerLocations?.[currentUser().id];
+  const saved = state.ui.lastMapCenter;
+  const defaultCenter = userLoc
+    ? { lat: userLoc.lat, lng: userLoc.lng, zoom: 13 }
+    : saved?.zoom ? saved : null;
+  const fallback = { lat: 14.0723, lng: -87.1921, zoom: 12 }; // Tegucigalpa
+  const c = defaultCenter || fallback;
   map = L.map(qs("#map")).setView([c.lat, c.lng], c.zoom || 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
   map.on("moveend", () => { const center = map.getCenter(); state.ui.lastMapCenter = { lat: center.lat, lng: center.lng, zoom: map.getZoom() }; saveState(); });
   map.on("click", (ev) => { if (!pendingPick) return; const r = pendingPick; pendingPick = null; r({ lat: ev.latlng.lat, lng: ev.latlng.lng }); toast("Ubicación seleccionada"); });
+  // If no saved center yet, try to auto-locate
+  if (!defaultCenter && navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      map.setView([pos.coords.latitude, pos.coords.longitude], 13);
+    }, null, { timeout: 5000 });
+  }
 }
 
 function clearMapLayers() {
