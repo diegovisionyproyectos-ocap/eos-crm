@@ -28,16 +28,23 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      await signIn(email, password);
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 12000)
+      );
+      await Promise.race([signIn(email, password), timeout]);
       navigate('/', { replace: true });
     } catch (err) {
-      const msg = err.message || 'Error al iniciar sesión';
-      if (msg.includes('Invalid login')) {
-        setError('Correo o contraseña incorrectos. Verifica tus datos.');
+      const msg = err.message || '';
+      if (msg === 'timeout') {
+        setError('No se pudo conectar con el servidor. Verifica tu conexión o intenta en unos minutos.');
+      } else if (msg.includes('Invalid login') || msg.includes('invalid_grant')) {
+        setError('Correo o contraseña incorrectos.');
       } else if (msg.includes('Email not confirmed')) {
         setError('Confirma tu correo electrónico antes de ingresar.');
+      } else if (msg.includes('no configurado')) {
+        setError('El sistema no está configurado. Contacta al administrador.');
       } else {
-        setError(msg);
+        setError(msg || 'Error al iniciar sesión. Intenta de nuevo.');
       }
     } finally {
       setLoading(false);
