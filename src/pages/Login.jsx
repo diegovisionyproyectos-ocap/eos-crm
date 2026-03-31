@@ -36,16 +36,11 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 30000)
-      );
-      await Promise.race([signIn(email, password), timeout]);
+      await signIn(email, password);
       navigate('/', { replace: true });
     } catch (err) {
       const msg = err.message || '';
-      if (msg === 'timeout') {
-        setError('No se pudo conectar con el servidor. Verifica tu conexión o intenta en unos minutos.');
-      } else if (msg.includes('Invalid login') || msg.includes('invalid_grant')) {
+      if (msg.includes('Invalid login') || msg.includes('invalid_grant')) {
         setError('Correo o contraseña incorrectos.');
       } else if (msg.includes('Email not confirmed')) {
         setError('Confirma tu correo electrónico antes de ingresar.');
