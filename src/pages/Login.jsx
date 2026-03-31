@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { signIn } from '../services/authService';
@@ -11,7 +11,15 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [slowWarning, setSlowWarning] = useState(false);
   const [error, setError] = useState('');
+
+  // Show a patience message if login takes more than 8 seconds
+  useEffect(() => {
+    if (!loading) { setSlowWarning(false); return; }
+    const t = setTimeout(() => setSlowWarning(true), 8000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Already logged in → redirect
   if (isAuthenticated) {
@@ -29,7 +37,7 @@ export default function Login() {
     setError('');
     try {
       const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 12000)
+        setTimeout(() => reject(new Error('timeout')), 30000)
       );
       await Promise.race([signIn(email, password), timeout]);
       navigate('/', { replace: true });
@@ -134,7 +142,7 @@ export default function Login() {
               {loading ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Ingresando…
+                  {slowWarning ? 'Conectando, un momento…' : 'Ingresando…'}
                 </>
               ) : (
                 'Ingresar'
