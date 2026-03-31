@@ -46,16 +46,19 @@ const useAppStore = create(
 
         // Restore existing session (e.g. page refresh)
         supabase.auth.getSession()
-          .then(async ({ data: { session } }) => {
+          .then(({ data: { session } }) => {
             clearTimeout(safetyTimer);
             if (session?.user) {
-              const profile = await getProfile(session.user.id);
+              // Set auth state immediately, load profile in background
               set({
                 user: session.user,
-                profile: profile || { id: session.user.id, role: 'seller', full_name: session.user.email },
+                profile: { id: session.user.id, role: 'seller', full_name: session.user.email },
                 isAuthenticated: true,
                 authLoading: false,
               });
+              getProfile(session.user.id).then((profile) => {
+                if (profile) set({ profile });
+              }).catch(() => {});
             } else {
               set({ authLoading: false });
             }
@@ -67,16 +70,22 @@ const useAppStore = create(
 
         // Live auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
+          (event, session) => {
             // TOKEN_REFRESHED fires when an expired access token is silently renewed
             if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-              const profile = await getProfile(session.user.id);
+              // Set authenticated IMMEDIATELY — do NOT await getProfile here.
+              // Supabase SDK waits for this callback to return before resolving
+              // signInWithPassword(), so any async DB call here blocks the login.
               set({
                 user: session.user,
-                profile: profile || { id: session.user.id, role: 'seller', full_name: session.user.email },
+                profile: { id: session.user.id, role: 'seller', full_name: session.user.email },
                 isAuthenticated: true,
                 authLoading: false,
               });
+              // Load full profile in background without blocking auth
+              getProfile(session.user.id).then((profile) => {
+                if (profile) set({ profile });
+              }).catch(() => {});
             } else if (event === 'SIGNED_OUT') {
               set({ user: null, profile: null, isAuthenticated: false, authLoading: false });
             }
