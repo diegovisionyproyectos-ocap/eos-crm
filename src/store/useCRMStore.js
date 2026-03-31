@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { fetchCompanies, createCompany, updateCompany, deleteCompany } from '../services/companiesService';
 import { fetchOpportunities, createOpportunity, updateOpportunity, deleteOpportunity, moveOpportunityStage } from '../services/opportunitiesService';
 import { fetchActivities, createActivity, completeActivity, deleteActivity } from '../services/activitiesService';
+import { createContact, updateContact, deleteContact } from '../services/contactsService';
 import { SEED_COMPANIES, SEED_OPPORTUNITIES } from '../utils/constants';
 
 const useCRMStore = create(
@@ -141,6 +142,47 @@ const useCRMStore = create(
       async removeActivity(id) {
         await deleteActivity(id);
         set((s) => ({ activities: s.activities.filter((a) => a.id !== id) }));
+      },
+
+      // ── Contacts ──────────────────────────────────────────
+      async addContact(companyId, payload) {
+        const contact = await createContact({ ...payload, company_id: companyId });
+        const newContact = contact || { ...payload, company_id: companyId, id: `ct${Date.now()}`, created_at: new Date().toISOString() };
+        set((s) => ({
+          companies: s.companies.map((c) =>
+            c.id === companyId
+              ? { ...c, crm_contacts: [...(c.crm_contacts || []), newContact] }
+              : c
+          ),
+        }));
+        return newContact;
+      },
+
+      async editContact(id, companyId, payload) {
+        const updated = await updateContact(id, payload);
+        set((s) => ({
+          companies: s.companies.map((c) =>
+            c.id === companyId
+              ? {
+                  ...c,
+                  crm_contacts: (c.crm_contacts || []).map((ct) =>
+                    ct.id === id ? { ...ct, ...(updated || payload) } : ct
+                  ),
+                }
+              : c
+          ),
+        }));
+      },
+
+      async removeContact(id, companyId) {
+        await deleteContact(id);
+        set((s) => ({
+          companies: s.companies.map((c) =>
+            c.id === companyId
+              ? { ...c, crm_contacts: (c.crm_contacts || []).filter((ct) => ct.id !== id) }
+              : c
+          ),
+        }));
       },
 
       // ── Derived getters ───────────────────────────────────

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Building2, X, Phone, Mail, MapPin, Users, TrendingUp, Pencil, Trash2, ExternalLink } from 'lucide-react';
+import { Search, Plus, Building2, X, MapPin, Users, Pencil, Trash2, Star } from 'lucide-react';
 import Layout from '../components/layout/Layout';
 import CompanyCard from '../modules/companies/CompanyCard';
 import CompanyForm from '../modules/companies/CompanyForm';
+import ContactForm from '../modules/contacts/ContactForm';
 import ActivityFeed from '../modules/activities/ActivityFeed';
 import Button from '../components/ui/Button';
 import { COMPANY_STATUS, PIPELINE_STAGES } from '../utils/constants';
@@ -11,7 +12,7 @@ import useCRMStore from '../store/useCRMStore';
 import useAppStore from '../store/useAppStore';
 
 export default function Companies() {
-  const { companies, opportunities, activities, initialize, removeCompany } = useCRMStore();
+  const { companies, opportunities, initialize, removeCompany, removeContact } = useCRMStore();
   const { openModal, detailPanel, openDetailPanel, closeDetailPanel, addToast } = useAppStore();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -37,6 +38,12 @@ export default function Companies() {
     await removeCompany(id);
     closeDetailPanel();
     addToast('Colegio eliminado');
+  };
+
+  const handleDeleteContact = async (contactId, companyId) => {
+    if (!confirm('¿Eliminar este contacto?')) return;
+    await removeContact(contactId, companyId);
+    addToast('Contacto eliminado');
   };
 
   return (
@@ -158,6 +165,60 @@ export default function Companies() {
                 </div>
               )}
 
+              {/* Contacts */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-700">
+                    Contactos ({(selectedCompany.crm_contacts || []).length})
+                  </p>
+                  <button
+                    onClick={() => openModal('contactForm', { company_id: selectedCompany.id })}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                {(selectedCompany.crm_contacts || []).length === 0 ? (
+                  <p className="text-xs text-slate-400">Sin contactos registrados</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedCompany.crm_contacts.map((ct) => (
+                      <div key={ct.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 group">
+                        <div className="relative flex-shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600">
+                            {getInitials(ct.name)}
+                          </div>
+                          {ct.is_primary && (
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 rounded-full flex items-center justify-center">
+                              <Star size={7} className="text-white fill-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-800 truncate">{ct.name}</p>
+                          {ct.role && <p className="text-[10px] text-slate-500">{ct.role}</p>}
+                          {ct.phone && <p className="text-[10px] text-slate-400">{ct.phone}</p>}
+                        </div>
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <button
+                            onClick={() => openModal('contactForm', { ...ct, company_id: selectedCompany.id })}
+                            className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteContact(ct.id, selectedCompany.id)}
+                            className="p-1 text-slate-400 hover:text-red-500 rounded"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Opportunities */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -230,6 +291,7 @@ export default function Companies() {
 
       {/* Modals */}
       <CompanyForm />
+      <ContactForm />
     </Layout>
   );
 }

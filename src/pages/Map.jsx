@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { Thermometer, Navigation, Building2, X, MapPin, Users, Pencil, Trash2 } from 'lucide-react';
+import { Thermometer, Navigation, Building2, X, MapPin, Users, Pencil, Trash2, Star } from 'lucide-react';
 import clsx from 'clsx';
 import Layout from '../components/layout/Layout';
 import MapView from '../modules/map/MapView';
 import CompanyCard from '../modules/companies/CompanyCard';
 import CompanyForm from '../modules/companies/CompanyForm';
+import ContactForm from '../modules/contacts/ContactForm';
 import ActivityFeed from '../modules/activities/ActivityFeed';
 import Button from '../components/ui/Button';
 import { COMPANY_STATUS, PIPELINE_STAGES } from '../utils/constants';
@@ -19,7 +20,7 @@ const MAP_MODES = [
 ];
 
 export default function MapPage() {
-  const { companies, opportunities, initialize, removeCompany } = useCRMStore();
+  const { companies, opportunities, initialize, removeCompany, removeContact } = useCRMStore();
   const {
     mapMode, setMapMode,
     selectedMapCompanyId, setSelectedMapCompanyId,
@@ -53,6 +54,12 @@ export default function MapPage() {
     await removeCompany(id);
     closeDetailPanel();
     addToast('Colegio eliminado');
+  };
+
+  const handleDeleteContact = async (contactId, companyId) => {
+    if (!confirm('¿Eliminar este contacto?')) return;
+    await removeContact(contactId, companyId);
+    addToast('Contacto eliminado');
   };
 
   return (
@@ -127,7 +134,7 @@ export default function MapPage() {
         {/* ── Side panel ─────────────────────────────────────────── */}
         <div className="w-80 flex-shrink-0 flex flex-col gap-3 overflow-hidden">
           {selectedCompany ? (
-            /* Full detail panel — same as Companies page */
+            /* Full detail panel */
             <div className="flex-1 bg-white border border-slate-100 rounded-2xl shadow-card overflow-hidden flex flex-col animate-slide-in-right">
               {/* Header */}
               <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-2">
@@ -184,6 +191,60 @@ export default function MapPage() {
                     <p className="text-slate-600 text-xs leading-relaxed">{selectedCompany.notes}</p>
                   </div>
                 )}
+
+                {/* Contacts */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-slate-700">
+                      Contactos ({(selectedCompany.crm_contacts || []).length})
+                    </p>
+                    <button
+                      onClick={() => openModal('contactForm', { company_id: selectedCompany.id })}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      + Agregar
+                    </button>
+                  </div>
+                  {(selectedCompany.crm_contacts || []).length === 0 ? (
+                    <p className="text-xs text-slate-400">Sin contactos registrados</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {selectedCompany.crm_contacts.map((ct) => (
+                        <div key={ct.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center gap-2 group">
+                          <div className="relative flex-shrink-0">
+                            <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600">
+                              {getInitials(ct.name)}
+                            </div>
+                            {ct.is_primary && (
+                              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 rounded-full flex items-center justify-center">
+                                <Star size={7} className="text-white fill-white" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-800 truncate">{ct.name}</p>
+                            {ct.role && <p className="text-[10px] text-slate-500">{ct.role}</p>}
+                            {ct.phone && <p className="text-[10px] text-slate-400">{ct.phone}</p>}
+                          </div>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                            <button
+                              onClick={() => openModal('contactForm', { ...ct, company_id: selectedCompany.id })}
+                              className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteContact(ct.id, selectedCompany.id)}
+                              className="p-1 text-slate-400 hover:text-red-500 rounded"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Opportunities */}
                 <div>
@@ -266,8 +327,9 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Company form modal (also used after location pick) */}
+      {/* Modals */}
       <CompanyForm />
+      <ContactForm />
     </Layout>
   );
 }
