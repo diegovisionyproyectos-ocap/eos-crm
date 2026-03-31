@@ -1,10 +1,14 @@
 import { useEffect } from 'react';
-import { Layers, Thermometer, Navigation, Building2, X } from 'lucide-react';
+import { Thermometer, Navigation, Building2, X, MapPin, Users, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import Layout from '../components/layout/Layout';
 import MapView from '../modules/map/MapView';
 import CompanyCard from '../modules/companies/CompanyCard';
-import { COMPANY_STATUS } from '../utils/constants';
+import CompanyForm from '../modules/companies/CompanyForm';
+import ActivityFeed from '../modules/activities/ActivityFeed';
+import Button from '../components/ui/Button';
+import { COMPANY_STATUS, PIPELINE_STAGES } from '../utils/constants';
+import { formatCurrency, formatStudents, getInitials } from '../utils/formatters';
 import useCRMStore from '../store/useCRMStore';
 import useAppStore from '../store/useAppStore';
 
@@ -15,15 +19,41 @@ const MAP_MODES = [
 ];
 
 export default function MapPage() {
-  const { companies, opportunities, initialize } = useCRMStore();
-  const { mapMode, setMapMode, selectedMapCompanyId, setSelectedMapCompanyId, openModal } = useAppStore();
+  const { companies, opportunities, initialize, removeCompany } = useCRMStore();
+  const {
+    mapMode, setMapMode,
+    selectedMapCompanyId, setSelectedMapCompanyId,
+    openModal, openDetailPanel, closeDetailPanel, detailPanel, addToast,
+    pickedLocation,
+  } = useAppStore();
 
   useEffect(() => { initialize(); }, []);
 
-  const selectedCompany = companies.find((c) => c.id === selectedMapCompanyId);
+  // Re-open company form after user picks a location on the map
+  useEffect(() => {
+    if (pickedLocation) openModal('companyForm');
+  }, [pickedLocation]);
+
+  const selectedCompany = detailPanel?.type === 'company'
+    ? companies.find((c) => c.id === detailPanel.id)
+    : null;
+
   const companyOpps = selectedCompany
     ? opportunities.filter((o) => o.company_id === selectedCompany.id)
     : [];
+
+  // Clicking a school on the map → fly to it AND open the detail panel
+  const handleCompanyClick = (id) => {
+    setSelectedMapCompanyId(id);
+    openDetailPanel('company', id);
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('¿Eliminar este colegio?')) return;
+    await removeCompany(id);
+    closeDetailPanel();
+    addToast('Colegio eliminado');
+  };
 
   return (
     <Layout
@@ -38,7 +68,7 @@ export default function MapPage() {
       }
     >
       <div className="flex gap-4 h-[calc(100vh-160px)]">
-        {/* Map */}
+        {/* ── Map column ─────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col gap-3 min-w-0">
           {/* Mode toggles */}
           <div className="flex items-center gap-2">
@@ -81,7 +111,7 @@ export default function MapPage() {
 
           {/* Map container */}
           <div className="flex-1 rounded-xl overflow-hidden shadow-card border border-slate-100">
-            <MapView onCompanyClick={setSelectedMapCompanyId} />
+            <MapView onCompanyClick={handleCompanyClick} />
           </div>
 
           {/* Stats bar */}
@@ -94,30 +124,24 @@ export default function MapPage() {
           </div>
         </div>
 
-        {/* Side panel */}
-        <div className="w-72 flex-shrink-0 flex flex-col gap-3">
+        {/* ── Side panel ─────────────────────────────────────────── */}
+        <div className="w-80 flex-shrink-0 flex flex-col gap-3 overflow-hidden">
           {selectedCompany ? (
-            <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-              {/* Selected company detail */}
-              <div className="bg-white rounded-xl border border-slate-100 shadow-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-slate-900">Detalle</h3>
-                  <button
-                    onClick={() => setSelectedMapCompanyId(null)}
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            /* Full detail panel — same as Companies page */
+            <div className="flex-1 bg-white border border-slate-100 rounded-2xl shadow-card overflow-hidden flex flex-col animate-slide-in-right">
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                    style={{ backgroundColor: COMPANY_STATUS[selectedCompany.status]?.color || '#6366f1' }}
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium text-slate-900">{selectedCompany.name}</p>
-                  {selectedCompany.city && <p className="text-slate-500">📍 {selectedCompany.city}</p>}
-                  {selectedCompany.student_count && (
-                    <p className="text-slate-500">👨‍🎓 {selectedCompany.student_count?.toLocaleString('es-CO')} estudiantes</p>
-                  )}
-                  <div className="pt-1">
+                    {getInitials(selectedCompany.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{selectedCompany.name}</p>
                     <span
-                      className="text-xs font-medium px-2.5 py-1 rounded-full"
+                      className="text-xs font-medium px-2 py-0.5 rounded-full"
                       style={{
                         backgroundColor: COMPANY_STATUS[selectedCompany.status]?.bg,
                         color: COMPANY_STATUS[selectedCompany.status]?.color,
@@ -127,22 +151,105 @@ export default function MapPage() {
                     </span>
                   </div>
                 </div>
+                <button
+                  onClick={() => { closeDetailPanel(); setSelectedMapCompanyId(null); }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0"
+                >
+                  <X size={16} />
+                </button>
+              </div>
 
-                {companyOpps.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100">
-                    <p className="text-xs font-medium text-slate-500 mb-2">Oportunidades</p>
-                    <div className="space-y-1.5">
-                      {companyOpps.slice(0, 3).map((opp) => (
-                        <div key={opp.id} className="flex items-center justify-between text-xs">
-                          <span className="text-slate-700 truncate max-w-[140px]">{opp.title}</span>
-                          <span className="text-slate-500 ml-2">
-                            {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(opp.value || 0)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Info grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedCompany.city && (
+                    <InfoItem icon={<MapPin size={14} />} label="Ciudad" value={selectedCompany.city} />
+                  )}
+                  {selectedCompany.student_count && (
+                    <InfoItem icon={<Users size={14} />} label="Estudiantes" value={formatStudents(selectedCompany.student_count)} />
+                  )}
+                </div>
+
+                {selectedCompany.address && (
+                  <div className="text-sm">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Dirección</p>
+                    <p className="text-slate-700">{selectedCompany.address}</p>
                   </div>
                 )}
+
+                {selectedCompany.notes && (
+                  <div className="text-sm">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Notas</p>
+                    <p className="text-slate-600 text-xs leading-relaxed">{selectedCompany.notes}</p>
+                  </div>
+                )}
+
+                {/* Opportunities */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-slate-700">Oportunidades ({companyOpps.length})</p>
+                    <button
+                      onClick={() => openModal('opportunityForm', { company_id: selectedCompany.id })}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      + Nueva
+                    </button>
+                  </div>
+                  {companyOpps.length === 0 ? (
+                    <p className="text-xs text-slate-400">Sin oportunidades</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {companyOpps.map((opp) => {
+                        const stg = PIPELINE_STAGES.find((s) => s.id === opp.stage);
+                        return (
+                          <div key={opp.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-xs font-medium text-slate-800 truncate">{opp.title}</p>
+                              <span
+                                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: stg?.bg, color: stg?.color }}
+                              >
+                                {stg?.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {formatCurrency(opp.value, true)} · {opp.probability}%
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent activities */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-3">Actividades recientes</p>
+                  <ActivityFeed companyId={selectedCompany.id} limit={5} />
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div className="px-5 py-3 border-t border-slate-100 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Pencil}
+                  className="flex-1"
+                  onClick={() => openModal('companyForm', selectedCompany)}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => handleDelete(selectedCompany.id)}
+                  className="text-red-500 border-red-200 hover:bg-red-50"
+                >
+                  Eliminar
+                </Button>
               </div>
             </div>
           ) : (
@@ -158,6 +265,21 @@ export default function MapPage() {
           )}
         </div>
       </div>
+
+      {/* Company form modal (also used after location pick) */}
+      <CompanyForm />
     </Layout>
+  );
+}
+
+function InfoItem({ icon, label, value }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="text-slate-400 mt-0.5 flex-shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-[10px] text-slate-400 uppercase tracking-wide">{label}</p>
+        <p className="text-sm text-slate-700 font-medium truncate">{value}</p>
+      </div>
+    </div>
   );
 }
