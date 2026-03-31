@@ -43,9 +43,14 @@ export default function MapView({ onCompanyClick, showControls = true }) {
   const map = useRef(null);
   const popupRef = useRef(null);
   const selectedMarkerRef = useRef(null);
+  // Ref so the map click handler (registered once) always reads the current value
+  const locationPickModeRef = useRef(false);
 
   const { companies, opportunities, activities } = useCRMStore();
   const { mapMode, locationPickMode, setPickedLocation, selectedMapCompanyId } = useAppStore();
+
+  // Keep ref in sync with state
+  useEffect(() => { locationPickModeRef.current = locationPickMode; }, [locationPickMode]);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -250,15 +255,15 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       if (onCompanyClick) onCompanyClick(id);
     });
 
-    // Map click in location-pick mode
+    // Map click in location-pick mode (use ref — avoids stale closure)
     m.on('click', (e) => {
-      if (!locationPickMode) return;
+      if (!locationPickModeRef.current) return;
       setPickedLocation({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     });
 
     // Cursor changes
     m.on('mouseenter', 'schools-point', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'schools-point', () => { m.getCanvas().style.cursor = locationPickMode ? 'crosshair' : ''; });
+    m.on('mouseleave', 'schools-point', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : ''; });
     m.on('mouseenter', 'clusters', () => { m.getCanvas().style.cursor = 'pointer'; });
     m.on('mouseleave', 'clusters', () => { m.getCanvas().style.cursor = ''; });
   };
