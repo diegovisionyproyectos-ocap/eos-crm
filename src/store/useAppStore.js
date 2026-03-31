@@ -38,28 +38,38 @@ const useAppStore = create(
           return;
         }
 
+        // Safety net — if getSession() hangs (expired/corrupt token in localStorage),
+        // force the spinner off after 8 s so the user isn't stuck forever.
+        const safetyTimer = setTimeout(() => {
+          if (get().authLoading) set({ authLoading: false });
+        }, 8000);
+
         // Restore existing session (e.g. page refresh)
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
-          if (session?.user) {
-            const profile = await getProfile(session.user.id);
-            set({
-              user: session.user,
-              profile: profile || { id: session.user.id, role: 'seller', full_name: session.user.email },
-              isAuthenticated: true,
-              authLoading: false,
-            });
-          } else {
+        supabase.auth.getSession()
+          .then(async ({ data: { session } }) => {
+            clearTimeout(safetyTimer);
+            if (session?.user) {
+              const profile = await getProfile(session.user.id);
+              set({
+                user: session.user,
+                profile: profile || { id: session.user.id, role: 'seller', full_name: session.user.email },
+                isAuthenticated: true,
+                authLoading: false,
+              });
+            } else {
+              set({ authLoading: false });
+            }
+          })
+          .catch(() => {
+            clearTimeout(safetyTimer);
             set({ authLoading: false });
-          }
-        }).catch(() => {
-          // Network error or bad config — stop spinner and show login
-          set({ authLoading: false });
-        });
+          });
 
         // Live auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, session) => {
-            if (event === 'SIGNED_IN' && session?.user) {
+            // TOKEN_REFRESHED fires when an expired access token is silently renewed
+            if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
               const profile = await getProfile(session.user.id);
               set({
                 user: session.user,
