@@ -51,6 +51,9 @@ const useAppStore = create(
           } else {
             set({ authLoading: false });
           }
+        }).catch(() => {
+          // Network error or bad config — stop spinner and show login
+          set({ authLoading: false });
         });
 
         // Live auth state changes
