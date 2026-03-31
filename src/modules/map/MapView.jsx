@@ -5,6 +5,35 @@ import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../utils/constants';
 import useCRMStore from '../../store/useCRMStore';
 import useAppStore from '../../store/useAppStore';
 
+// Inject pulse animation once
+if (typeof document !== 'undefined' && !document.getElementById('eos-marker-style')) {
+  const style = document.createElement('style');
+  style.id = 'eos-marker-style';
+  style.textContent = `
+    @keyframes eos-ring {
+      0%   { transform: scale(1);   opacity: 0.8; }
+      70%  { transform: scale(2.4); opacity: 0;   }
+      100% { transform: scale(2.4); opacity: 0;   }
+    }
+    @keyframes eos-bounce {
+      0%, 100% { transform: translateY(0);  }
+      50%       { transform: translateY(-6px); }
+    }
+    .eos-pin-ring {
+      position: absolute; inset: -8px;
+      border-radius: 50%;
+      border: 3px solid #6366f1;
+      animation: eos-ring 1.6s ease-out infinite;
+    }
+    .eos-pin-body {
+      position: relative;
+      width: 36px; height: 36px;
+      animation: eos-bounce 2s ease-in-out infinite;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 /**
  * MapView — MapLibre GL JS integration
  * Renders school markers with clustering, status colors, heatmap, and visit routes.
@@ -13,6 +42,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const popupRef = useRef(null);
+  const selectedMarkerRef = useRef(null);
 
   const { companies, opportunities, activities } = useCRMStore();
   const { mapMode, locationPickMode, setPickedLocation, selectedMapCompanyId } = useAppStore();
@@ -275,18 +305,56 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     show('routes-layer', isRoutes);
   }, [mapMode]);
 
-  // ── Fly to selected company ──────────────────────────────────────────────────
+  // ── Fly to selected company + animated pin + 3D pitch ───────────────────────
   useEffect(() => {
-    if (!selectedMapCompanyId || !map.current) return;
-    const company = companies.find((c) => c.id === selectedMapCompanyId);
-    if (company?.lat && company?.lng) {
-      map.current.flyTo({
-        center: [company.lng, company.lat],
-        zoom: 14,
-        speed: 1.5,
-        essential: true,
-      });
+    // Remove previous marker
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.remove();
+      selectedMarkerRef.current = null;
     }
+
+    if (!selectedMapCompanyId || !map.current) {
+      // Reset camera when deselected
+      if (map.current) map.current.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+      return;
+    }
+
+    const company = companies.find((c) => c.id === selectedMapCompanyId);
+    if (!company?.lat || !company?.lng) return;
+
+    // Build animated HTML marker
+    const el = document.createElement('div');
+    el.style.cssText = 'position:relative;width:36px;height:36px;cursor:pointer';
+    el.innerHTML = `
+      <div class="eos-pin-body">
+        <div class="eos-pin-ring"></div>
+        <svg viewBox="0 0 36 44" width="36" height="44" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="eos-shadow" x="-30%" y="-20%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#6366f1" flood-opacity="0.5"/>
+            </filter>
+          </defs>
+          <path d="M18 0C8.06 0 0 8.06 0 18c0 12 18 26 18 26S36 30 36 18C36 8.06 27.94 0 18 0z"
+                fill="#6366f1" filter="url(#eos-shadow)"/>
+          <circle cx="18" cy="18" r="8" fill="white" opacity="0.95"/>
+          <circle cx="18" cy="18" r="4" fill="#6366f1"/>
+        </svg>
+      </div>
+    `;
+
+    selectedMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([company.lng, company.lat])
+      .addTo(map.current);
+
+    // Fly with 3D tilt
+    map.current.flyTo({
+      center: [company.lng, company.lat],
+      zoom: 15,
+      pitch: 50,
+      bearing: -15,
+      speed: 1.2,
+      essential: true,
+    });
   }, [selectedMapCompanyId, companies]);
 
   // ── Fit map to all schools ───────────────────────────────────────────────────
