@@ -145,6 +145,12 @@ const useAppStore = create(
       /** Show vendor location pins on the main map (admin only) */
       showTeamOnMap: false,
       setShowTeamOnMap: (v) => set({ showTeamOnMap: v }),
+
+      // OSM Schools overlay
+      showOsmSchools: true,
+      setShowOsmSchools: (v) => set({ showOsmSchools: v }),
+      osmSchoolCount: 0,
+      setOsmSchoolCount: (n) => set({ osmSchoolCount: n }),
     }),
     { name: 'eos-app-store' }
   )

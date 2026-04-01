@@ -9,6 +9,7 @@ import ContactForm from '../modules/contacts/ContactForm';
 import ActivityFeed from '../modules/activities/ActivityFeed';
 import Button from '../components/ui/Button';
 import { COMPANY_STATUS, PIPELINE_STAGES } from '../utils/constants';
+import { School } from 'lucide-react';
 import { formatCurrency, formatStudents, getInitials } from '../utils/formatters';
 import useCRMStore from '../store/useCRMStore';
 import useAppStore from '../store/useAppStore';
@@ -23,9 +24,10 @@ export default function MapPage() {
   const { companies, opportunities, initialize, removeCompany, removeContact } = useCRMStore();
   const {
     mapMode, setMapMode,
-    selectedMapCompanyId, setSelectedMapCompanyId,
+    setSelectedMapCompanyId,
     openModal, openDetailPanel, closeDetailPanel, detailPanel, addToast,
     pickedLocation,
+    showOsmSchools, setShowOsmSchools, osmSchoolCount,
   } = useAppStore();
 
   useEffect(() => { initialize(); }, []);
@@ -94,6 +96,25 @@ export default function MapPage() {
                 {label}
               </button>
             ))}
+
+            {/* OSM schools toggle */}
+            <button
+              onClick={() => setShowOsmSchools(!showOsmSchools)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                showOsmSchools
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+              )}
+            >
+              <School size={14} />
+              Colegios OSM
+              {osmSchoolCount > 0 && (
+                <span className={clsx('text-xs font-bold', showOsmSchools ? 'text-amber-100' : 'text-amber-500')}>
+                  {osmSchoolCount}
+                </span>
+              )}
+            </button>
 
             {/* Legend */}
             <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
