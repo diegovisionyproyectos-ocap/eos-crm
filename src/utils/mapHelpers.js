@@ -122,6 +122,24 @@ export function getBounds(coords) {
 }
 
 /**
+ * Convert OSM schools (from Overpass API) to GeoJSON for the background layer.
+ * @param {Array} osmSchools - elements returned by Overpass (nodes + ways with center)
+ */
+export function osmSchoolsToGeoJSON(osmSchools = []) {
+  const features = osmSchools
+    .filter((s) => s.lat != null && s.lon != null)
+    .map((s) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+      properties: {
+        osmId: s.id,
+        name: s.tags?.name || s.tags?.['name:es'] || 'Escuela sin nombre',
+      },
+    }));
+  return { type: 'FeatureCollection', features };
+}
+
+/**
  * Base MapLibre style using OpenStreetMap tiles
  * Professional look using CartoDB Positron-style via OSM
  */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
-import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle } from '../../utils/mapHelpers';
+import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle, osmSchoolsToGeoJSON } from '../../utils/mapHelpers';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../utils/constants';
 import { fetchAllSchoolsElSalvador, osmSchoolsToGeoJSON } from '../../utils/osmSchools';
 import useCRMStore from '../../store/useCRMStore';
@@ -43,7 +43,10 @@ export default function MapView({ onCompanyClick, showControls = true }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const popupRef = useRef(null);
+  const hoverPopupRef = useRef(null);
   const selectedMarkerRef = useRef(null);
+  const osmSchoolsRef = useRef({ type: 'FeatureCollection', features: [] });
+  // Ref so the map click handler (registered once) always reads the current value
   const locationPickModeRef = useRef(false);
   const openModalRef = useRef(null); // stable ref so OSM popup handler never goes stale
 
@@ -58,6 +61,57 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       openModal('companyForm', { name, address, lat, lng, status: 'prospect' });
     };
   }, [openModal]);
+
+  // ── Fetch all El Salvador schools from Overpass API (cached 24h) ────────────
+  useEffect(() => {
+    const CACHE_KEY = 'eos_osm_schools_sv';
+    const BBOX = '13.15,-90.12,14.45,-87.70';
+    const OVERPASS = 'https://overpass-api.de/api/interpreter';
+
+    async function loadOsmSchools() {
+      // Try cache first
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, ts } = JSON.parse(cached);
+          if (Date.now() - ts < 24 * 60 * 60 * 1000) {
+            osmSchoolsRef.current = osmSchoolsToGeoJSON(data);
+            const src = map.current?.getSource('osm-schools');
+            if (src) src.setData(osmSchoolsRef.current);
+            return;
+          }
+        }
+      } catch {}
+
+      try {
+        const query = `[out:json][timeout:90];(node["amenity"="school"](${BBOX});way["amenity"="school"](${BBOX}););out center;`;
+        const res = await fetch(OVERPASS, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const schools = json.elements
+          .map((el) => ({
+            id: el.id,
+            lat: el.lat ?? el.center?.lat,
+            lon: el.lon ?? el.center?.lon,
+            tags: el.tags || {},
+          }))
+          .filter((s) => s.lat != null && s.lon != null);
+
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: schools, ts: Date.now() }));
+        osmSchoolsRef.current = osmSchoolsToGeoJSON(schools);
+        const src = map.current?.getSource('osm-schools');
+        if (src) src.setData(osmSchoolsRef.current);
+      } catch (err) {
+        console.warn('Overpass fetch failed:', err);
+      }
+    }
+
+    loadOsmSchools();
+  }, []);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -96,6 +150,12 @@ export default function MapView({ onCompanyClick, showControls = true }) {
 
   // ── Setup GeoJSON sources ────────────────────────────────────────────────────
   const setupSources = (m) => {
+    // All El Salvador schools from OSM (background reference layer)
+    m.addSource('osm-schools', {
+      type: 'geojson',
+      data: osmSchoolsRef.current,
+    });
+
     // Clustered school markers
     m.addSource('schools', {
       type: 'geojson',
@@ -225,6 +285,21 @@ export default function MapView({ onCompanyClick, showControls = true }) {
         'line-width': 2.5,
         'line-dasharray': [3, 2],
         'line-opacity': 0.7,
+      },
+    });
+
+    // --- OSM schools background layer (all El Salvador schools, gray) ---
+    m.addLayer({
+      id: 'osm-schools-point',
+      type: 'circle',
+      source: 'osm-schools',
+      layout: { visibility: 'visible' },
+      paint: {
+        'circle-color': '#cbd5e1',
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 14, 7],
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#94a3b8',
+        'circle-opacity': 0.7,
       },
     });
 
@@ -398,6 +473,30 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     m.on('mouseleave', 'schools-point', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : ''; });
     m.on('mouseenter', 'clusters', () => { m.getCanvas().style.cursor = 'pointer'; });
     m.on('mouseleave', 'clusters', () => { m.getCanvas().style.cursor = ''; });
+    m.on('mouseenter', 'osm-schools-point', () => { m.getCanvas().style.cursor = 'default'; });
+    m.on('mouseleave', 'osm-schools-point', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : ''; });
+
+    // Shared hover popup (lightweight name tooltip)
+    hoverPopupRef.current = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 12,
+      maxWidth: '220px',
+    });
+
+    const showHover = (e) => {
+      const name = e.features[0].properties.name;
+      hoverPopupRef.current
+        .setLngLat(e.lngLat)
+        .setHTML(`<div style="padding:5px 9px;font-size:12px;font-weight:500;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${name}</div>`)
+        .addTo(m);
+    };
+    const hideHover = () => hoverPopupRef.current.remove();
+
+    m.on('mousemove', 'osm-schools-point', showHover);
+    m.on('mouseleave', 'osm-schools-point', hideHover);
+    m.on('mousemove', 'schools-point', showHover);
+    m.on('mouseleave', 'schools-point', hideHover);
   };
 
   // ── Update location-pick cursor ──────────────────────────────────────────────
@@ -462,6 +561,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     const isHeatmap = mapMode === 'heatmap';
     const isRoutes = mapMode === 'routes';
 
+    show('osm-schools-point', isMarkers);
     show('clusters', isMarkers);
     show('cluster-count', isMarkers);
     show('schools-point', isMarkers || isRoutes);
