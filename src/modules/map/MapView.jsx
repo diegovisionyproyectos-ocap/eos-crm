@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
-import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle, osmSchoolsToGeoJSON } from '../../utils/mapHelpers';
+import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle } from '../../utils/mapHelpers';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../utils/constants';
 import { fetchAllSchoolsElSalvador, osmSchoolsToGeoJSON } from '../../utils/osmSchools';
 import useCRMStore from '../../store/useCRMStore';
@@ -62,55 +62,13 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     };
   }, [openModal]);
 
-  // ── Fetch all El Salvador schools from Overpass API (cached 24h) ────────────
+  // ── Fetch all El Salvador schools from Overpass API ─────────────────────────
   useEffect(() => {
-    const CACHE_KEY = 'eos_osm_schools_sv';
-    const BBOX = '13.15,-90.12,14.45,-87.70';
-    const OVERPASS = 'https://overpass-api.de/api/interpreter';
-
-    async function loadOsmSchools() {
-      // Try cache first
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const { data, ts } = JSON.parse(cached);
-          if (Date.now() - ts < 24 * 60 * 60 * 1000) {
-            osmSchoolsRef.current = osmSchoolsToGeoJSON(data);
-            const src = map.current?.getSource('osm-schools');
-            if (src) src.setData(osmSchoolsRef.current);
-            return;
-          }
-        }
-      } catch {}
-
-      try {
-        const query = `[out:json][timeout:90];(node["amenity"="school"](${BBOX});way["amenity"="school"](${BBOX}););out center;`;
-        const res = await fetch(OVERPASS, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(query)}`,
-        });
-        if (!res.ok) return;
-        const json = await res.json();
-        const schools = json.elements
-          .map((el) => ({
-            id: el.id,
-            lat: el.lat ?? el.center?.lat,
-            lon: el.lon ?? el.center?.lon,
-            tags: el.tags || {},
-          }))
-          .filter((s) => s.lat != null && s.lon != null);
-
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: schools, ts: Date.now() }));
-        osmSchoolsRef.current = osmSchoolsToGeoJSON(schools);
-        const src = map.current?.getSource('osm-schools');
-        if (src) src.setData(osmSchoolsRef.current);
-      } catch (err) {
-        console.warn('Overpass fetch failed:', err);
-      }
-    }
-
-    loadOsmSchools();
+    fetchAllSchoolsElSalvador().then((schools) => {
+      osmSchoolsRef.current = osmSchoolsToGeoJSON(schools);
+      const src = map.current?.getSource('osm-schools');
+      if (src) src.setData(osmSchoolsRef.current);
+    });
   }, []);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
