@@ -98,6 +98,7 @@ export default function CompanyCard({ company }) {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedMapCompanyId(company.id);
+              openDetailPanel('company', company.id);
             }}
             className="flex-1 text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center justify-center gap-1 py-1.5 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"
           >

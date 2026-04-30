@@ -111,6 +111,7 @@ export const CONTACT_ROLES = [
   'Jefe de sistemas',
   'Jefe administrativo',
   'Contador(a)',
+  'Recepción',
   'Otro',
 ];
 

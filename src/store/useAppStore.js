@@ -137,9 +137,13 @@ const useAppStore = create(
 
       locationPickMode: false,
       pickedLocation: null,
-      startLocationPick: () => set({ locationPickMode: true, pickedLocation: null }),
+      locationPickOrigin: null,
+      startLocationPick: () => {
+        const currentModalData = get().modalData;
+        set({ locationPickMode: true, pickedLocation: null, locationPickOrigin: currentModalData });
+      },
       setPickedLocation: (loc) => set({ pickedLocation: loc, locationPickMode: false }),
-      cancelLocationPick: () => set({ locationPickMode: false, pickedLocation: null }),
+      cancelLocationPick: () => set({ locationPickMode: false, pickedLocation: null, locationPickOrigin: null }),
 
       // ── Team map ──────────────────────────────────────────
       /** Show vendor location pins on the main map (admin only) */

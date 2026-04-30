@@ -129,7 +129,7 @@ export function getBounds(coords) {
 export function getMapStyle() {
   return {
     version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sources: {
       osm: {
         type: 'raster',

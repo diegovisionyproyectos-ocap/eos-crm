@@ -186,7 +186,7 @@ export default function CompanyForm() {
             variant="secondary"
             size="sm"
             icon={MapPin}
-            onClick={() => { closeModal(); startLocationPick(); }}
+            onClick={() => { startLocationPick(); closeModal(); }}
             type="button"
           >
             Seleccionar en mapa

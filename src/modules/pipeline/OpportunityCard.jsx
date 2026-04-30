@@ -1,5 +1,5 @@
 import { Draggable } from '@hello-pangea/dnd';
-import { Building2, Calendar, TrendingUp, MoreVertical, MapPin, Award } from 'lucide-react';
+import { Building2, Calendar, TrendingUp, MoreVertical, MapPin, Award, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { formatCurrency, formatDate, getInitials } from '../../utils/formatters';
 import { STAGE_MAP } from '../../utils/constants';
@@ -7,8 +7,15 @@ import useCRMStore from '../../store/useCRMStore';
 import useAppStore from '../../store/useAppStore';
 
 export default function OpportunityCard({ opportunity, index }) {
-  const { getCompanyById } = useCRMStore();
-  const { openDetailPanel, openModal } = useAppStore();
+  const { getCompanyById, removeOpportunity } = useCRMStore();
+  const { openDetailPanel, openModal, addToast } = useAppStore();
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar "${opportunity.title}"?`)) return;
+    await removeOpportunity(opportunity.id);
+    addToast('Oportunidad eliminada');
+  };
 
   const company = getCompanyById(opportunity.company_id) || opportunity.crm_companies;
   const stage = STAGE_MAP[opportunity.stage];
@@ -52,12 +59,22 @@ export default function OpportunityCard({ opportunity, index }) {
                 )}
               </div>
             </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); openModal('opportunityForm', opportunity); }}
-              className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <MoreVertical size={14} />
-            </button>
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); openModal('opportunityForm', opportunity); }}
+                className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Editar"
+              >
+                <MoreVertical size={14} />
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Eliminar"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
 
           {/* Value + Probability */}

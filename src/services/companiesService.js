@@ -6,7 +6,7 @@ export async function fetchCompanies() {
   if (!supabase) return { data: [], error: null };
   const { data, error } = await supabase
     .from(TABLE)
-    .select('*, crm_contacts(id, name, role, email, phone, is_primary)')
+    .select('*, crm_contacts(id, company_id, name, role, email, phone, is_primary, notes)')
     .order('name');
   return { data: data || [], error };
 }

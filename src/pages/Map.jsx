@@ -26,15 +26,16 @@ export default function MapPage() {
     mapMode, setMapMode,
     setSelectedMapCompanyId,
     openModal, openDetailPanel, closeDetailPanel, detailPanel, addToast,
-    pickedLocation,
+    pickedLocation, locationPickOrigin,
     showOsmSchools, setShowOsmSchools, osmSchoolCount,
   } = useAppStore();
 
   useEffect(() => { initialize(); }, []);
 
-  // Re-open company form after user picks a location on the map
+  // Re-open company form after user picks a location on the map.
+  // If the pick started from an existing school's edit form, restore that school's data.
   useEffect(() => {
-    if (pickedLocation) openModal('companyForm');
+    if (pickedLocation) openModal('companyForm', locationPickOrigin || null);
   }, [pickedLocation]);
 
   const selectedCompany = detailPanel?.type === 'company'

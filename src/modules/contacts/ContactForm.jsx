@@ -6,6 +6,8 @@ import { CONTACT_ROLES } from '../../utils/constants';
 import useCRMStore from '../../store/useCRMStore';
 import useAppStore from '../../store/useAppStore';
 
+const CUSTOM_ROLE = '__custom__';
+
 const DEFAULT_FORM = {
   name: '',
   role: '',
@@ -26,21 +28,26 @@ export default function ContactForm() {
   const [companyId, setCompanyId] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const [customRole, setCustomRole] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
     if (isEditing) {
+      const savedRole = modalData.role || '';
+      const isKnownRole = CONTACT_ROLES.includes(savedRole);
       setForm({
         name: modalData.name || '',
-        role: modalData.role || '',
+        role: isKnownRole ? savedRole : (savedRole ? CUSTOM_ROLE : ''),
         email: modalData.email || '',
         phone: modalData.phone || '',
         is_primary: modalData.is_primary || false,
         notes: modalData.notes || '',
       });
+      setCustomRole(isKnownRole ? '' : savedRole);
       setCompanyId(modalData.company_id || '');
     } else {
       setForm(DEFAULT_FORM);
+      setCustomRole('');
       setCompanyId(modalData?.company_id || '');
     }
     setErrors({});
@@ -60,11 +67,13 @@ export default function ContactForm() {
 
     setSaving(true);
     try {
+      const finalRole = form.role === CUSTOM_ROLE ? customRole.trim() : form.role;
+      const payload = { ...form, role: finalRole };
       if (isEditing) {
-        await editContact(modalData.id, companyId, form);
+        await editContact(modalData.id, companyId, payload);
         addToast('Contacto actualizado');
       } else {
-        await addContact(companyId, form);
+        await addContact(companyId, payload);
         addToast('Contacto creado');
       }
       closeModal();
@@ -141,7 +150,16 @@ export default function ContactForm() {
           {CONTACT_ROLES.map((r) => (
             <option key={r} value={r}>{r}</option>
           ))}
+          <option value={CUSTOM_ROLE}>Rol no encontrado — escríbelo aquí</option>
         </Select>
+        {form.role === CUSTOM_ROLE && (
+          <Input
+            label="Escribe el rol de la persona"
+            placeholder="Ej: Secretaria, Subdirector, Tesorero…"
+            value={customRole}
+            onChange={(e) => setCustomRole(e.target.value)}
+          />
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Input

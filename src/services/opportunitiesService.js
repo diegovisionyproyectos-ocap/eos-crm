@@ -3,6 +3,9 @@ import { triggerERPSync } from './erpIntegration';
 
 const TABLE = 'crm_opportunities';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isRealId = (id) => UUID_RE.test(id);
+
 export async function fetchOpportunities() {
   if (!supabase) return { data: [], error: null };
   const { data, error } = await supabase
@@ -25,6 +28,7 @@ export async function createOpportunity(payload) {
 
 export async function updateOpportunity(id, payload) {
   if (!supabase) throw new Error('Supabase no configurado');
+  if (!isRealId(id)) return null; // seed / local record — skip DB
   const { data, error } = await supabase
     .from(TABLE)
     .update({ ...payload, updated_at: new Date().toISOString() })
@@ -58,6 +62,7 @@ export async function moveOpportunityStage(id, newStage, stageProbability) {
 
 export async function deleteOpportunity(id) {
   if (!supabase) throw new Error('Supabase no configurado');
+  if (!isRealId(id)) return; // seed / local record — skip DB
   const { error } = await supabase.from(TABLE).delete().eq('id', id);
   if (error) throw error;
 }

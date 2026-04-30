@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
-import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle } from '../../utils/mapHelpers';
+import { companiesToGeoJSON, buildHeatmapGeoJSON, buildRouteGeoJSON, getBounds, getMapStyle, getMarkerColor } from '../../utils/mapHelpers';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../utils/constants';
 import { fetchAllSchoolsElSalvador, osmSchoolsToGeoJSON } from '../../utils/osmSchools';
 import useCRMStore from '../../store/useCRMStore';
@@ -45,10 +45,10 @@ export default function MapView({ onCompanyClick, showControls = true }) {
   const popupRef = useRef(null);
   const hoverPopupRef = useRef(null);
   const selectedMarkerRef = useRef(null);
+  const crmMarkersRef = useRef([]); // HTML markers for each CRM school
   const osmSchoolsRef = useRef({ type: 'FeatureCollection', features: [] });
-  // Ref so the map click handler (registered once) always reads the current value
   const locationPickModeRef = useRef(false);
-  const openModalRef = useRef(null); // stable ref so OSM popup handler never goes stale
+  const openModalRef = useRef(null);
 
   const { companies, opportunities, activities } = useCRMStore();
   const { mapMode, locationPickMode, setPickedLocation, selectedMapCompanyId,
@@ -61,15 +61,6 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       openModal('companyForm', { name, address, lat, lng, status: 'prospect' });
     };
   }, [openModal]);
-
-  // ── Fetch all El Salvador schools from Overpass API ─────────────────────────
-  useEffect(() => {
-    fetchAllSchoolsElSalvador().then((schools) => {
-      osmSchoolsRef.current = osmSchoolsToGeoJSON(schools);
-      const src = map.current?.getSource('osm-schools');
-      if (src) src.setData(osmSchoolsRef.current);
-    });
-  }, []);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -94,13 +85,24 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     m.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
 
     m.on('load', () => {
-      setupSources(m);
-      setupLayers(m);
-      setupInteractions(m);
+      try { setupSources(m); } catch (e) { console.error('setupSources', e); }
+      try { setupLayers(m); } catch (e) { console.error('setupLayers', e); }
+      try { setupInteractions(m); } catch (e) { console.error('setupInteractions', e); }
+      // Populate CRM schools with whatever is already in the store at load time.
+      // The companies useEffect may have fired before the map was ready and exited
+      // early; this ensures markers appear immediately when the map finishes loading.
+      try {
+        const { companies: c, opportunities: o } = useCRMStore.getState();
+        const geojson = companiesToGeoJSON(c, o);
+        m.getSource('schools')?.setData(geojson);
+        console.debug('[MapView] seeded schools source with', geojson.features.length, 'features');
+      } catch (e) { console.error('seeding schools source', e); }
     });
 
     return () => {
       if (popupRef.current) popupRef.current.remove();
+      crmMarkersRef.current.forEach((mk) => mk.remove());
+      crmMarkersRef.current = [];
       m.remove();
       map.current = null;
     };
@@ -108,7 +110,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
 
   // ── Setup GeoJSON sources ────────────────────────────────────────────────────
   const setupSources = (m) => {
-    // All El Salvador schools from OSM (background reference layer)
+    // OSM schools background layer (all El Salvador schools, clustered)
     m.addSource('osm-schools', {
       type: 'geojson',
       data: osmSchoolsRef.current,
@@ -117,7 +119,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       clusterRadius: 40,
     });
 
-    // Clustered school markers
+    // Clustered CRM school markers
     m.addSource('schools', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: [] },
@@ -283,10 +285,10 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       filter: ['!', ['has', 'point_count']],
       paint: {
         'circle-color': ['get', 'stageColor'],
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 7, 14, 13],
-        'circle-stroke-width': 2.5,
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 10, 10, 16, 15, 22],
+        'circle-stroke-width': 3,
         'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.95,
+        'circle-opacity': 1,
       },
     });
 
@@ -299,24 +301,25 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Open Sans SemiBold'],
-        'text-size': 11,
-        'text-offset': [0, 1.5],
+        'text-size': 12,
+        'text-offset': [0, 1.8],
         'text-anchor': 'top',
         'text-max-width': 12,
       },
       paint: {
         'text-color': '#1e293b',
         'text-halo-color': '#ffffff',
-        'text-halo-width': 1.5,
+        'text-halo-width': 2,
       },
-      minzoom: 10,
+      minzoom: 9,
     });
   };
 
   // ── Setup map interactions ───────────────────────────────────────────────────
   const setupInteractions = (m) => {
-    // OSM cluster click → zoom in
+    // OSM cluster click → zoom in (skip in pick mode)
     m.on('click', 'osm-clusters', (e) => {
+      if (locationPickModeRef.current) return;
       const features = m.queryRenderedFeatures(e.point, { layers: ['osm-clusters'] });
       const clusterId = features[0].properties.cluster_id;
       m.getSource('osm-schools').getClusterExpansionZoom(clusterId, (err, zoom) => {
@@ -324,13 +327,14 @@ export default function MapView({ onCompanyClick, showControls = true }) {
         m.easeTo({ center: features[0].geometry.coordinates, zoom: zoom + 1 });
       });
     });
-    m.on('mouseenter', 'osm-clusters', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'osm-clusters', () => { m.getCanvas().style.cursor = ''; });
-    m.on('mouseenter', 'osm-schools-point', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'osm-schools-point', () => { m.getCanvas().style.cursor = ''; });
+    m.on('mouseenter', 'osm-clusters', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : 'pointer'; });
+    m.on('mouseleave', 'osm-clusters', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : ''; });
+    m.on('mouseenter', 'osm-schools-point', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : 'pointer'; });
+    m.on('mouseleave', 'osm-schools-point', () => { m.getCanvas().style.cursor = locationPickModeRef.current ? 'crosshair' : ''; });
 
-    // Cluster click → zoom in
+    // CRM cluster click → zoom in (skip in pick mode)
     m.on('click', 'clusters', (e) => {
+      if (locationPickModeRef.current) return;
       const features = m.queryRenderedFeatures(e.point, { layers: ['clusters'] });
       const clusterId = features[0].properties.cluster_id;
       m.getSource('schools').getClusterExpansionZoom(clusterId, (err, zoom) => {
@@ -339,8 +343,9 @@ export default function MapView({ onCompanyClick, showControls = true }) {
       });
     });
 
-    // School click → popup
+    // School click → popup (or pick location if in pick mode)
     m.on('click', 'schools-point', (e) => {
+      if (locationPickModeRef.current) return; // let general click handler grab coords
       const feature = e.features[0];
       const { name, city, status, student_count, opportunityValue, id, code } = feature.properties;
       const coords = feature.geometry.coordinates.slice();
@@ -355,12 +360,12 @@ export default function MapView({ onCompanyClick, showControls = true }) {
         .setHTML(buildPopupHTML({ name, city, status, student_count, opportunityValue, code }))
         .addTo(m);
 
-      // Notify parent
       if (onCompanyClick) onCompanyClick(id);
     });
 
-    // OSM school click → popup with "Add to CRM" button
+    // OSM school click → popup (or pick location if in pick mode)
     m.on('click', 'osm-schools-point', (e) => {
+      if (locationPickModeRef.current) return; // let general click handler grab coords
       const f = e.features[0];
       const { name, address, phone, website } = f.properties;
       const coords = f.geometry.coordinates.slice();
@@ -470,19 +475,56 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     });
   }, [showOsmSchools]);
 
-  // ── Update data when companies/opportunities change ──────────────────────────
+  // ── Render CRM school markers as HTML elements (always visible, no layer issues) ──
   useEffect(() => {
     const m = map.current;
-    if (!m?.isStyleLoaded()) return;
 
-    const schoolsSource = m.getSource('schools');
-    const heatmapSource = m.getSource('heatmap');
-    const routesSource = m.getSource('routes');
-    if (!schoolsSource) return;
+    const render = () => {
+      // Remove previous CRM markers
+      crmMarkersRef.current.forEach((mk) => mk.remove());
+      crmMarkersRef.current = [];
 
-    schoolsSource.setData(companiesToGeoJSON(companies, opportunities));
-    heatmapSource?.setData(buildHeatmapGeoJSON(companies));
-    routesSource?.setData(buildRouteGeoJSON(activities));
+      // Add one marker per school that has coordinates
+      companies.filter((c) => c.lat && c.lng).forEach((company) => {
+        const color = getMarkerColor(company.status);
+        const el = document.createElement('div');
+        el.style.cssText = [
+          'width:18px', 'height:18px', 'border-radius:50%',
+          `background:${color}`, 'border:3px solid #fff',
+          'box-shadow:0 2px 6px rgba(0,0,0,0.35)', 'cursor:pointer',
+          'transition:box-shadow .15s,border-color .15s',
+        ].join(';');
+        el.title = company.name;
+        el.addEventListener('mouseenter', () => {
+          el.style.boxShadow = `0 0 0 4px ${color}55, 0 2px 8px rgba(0,0,0,0.4)`;
+          el.style.borderColor = color;
+        });
+        el.addEventListener('mouseleave', () => {
+          el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.35)';
+          el.style.borderColor = '#fff';
+        });
+        el.addEventListener('click', (e) => {
+          if (locationPickModeRef.current) return;
+          e.stopPropagation();
+          if (onCompanyClick) onCompanyClick(company.id);
+        });
+
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([company.lng, company.lat])
+          .addTo(m);
+        crmMarkersRef.current.push(marker);
+      });
+
+      // Update heatmap and routes GeoJSON sources
+      m.getSource('heatmap')?.setData(buildHeatmapGeoJSON(companies));
+      m.getSource('routes')?.setData(buildRouteGeoJSON(activities));
+    };
+
+    if (m?.isStyleLoaded()) {
+      render();
+    } else if (m) {
+      m.once('load', render);
+    }
   }, [companies, opportunities, activities]);
 
   // ── Toggle layers based on mapMode ───────────────────────────────────────────
