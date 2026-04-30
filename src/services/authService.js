@@ -74,3 +74,12 @@ export async function registerUser(email, password, fullName) {
   if (error) throw error;
   return data;
 }
+
+export async function deleteUser(userId) {
+  if (!supabase) throw new Error('Supabase no está configurado');
+  const { error } = await supabase
+    .from('crm_profiles')
+    .delete()
+    .eq('id', userId);
+  if (error) throw error;
+}

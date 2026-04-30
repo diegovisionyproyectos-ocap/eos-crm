@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Layout from '../components/layout/Layout';
-import { Users, MapPin, TrendingUp, UserCheck, Plus, Mail, Lock, X, RefreshCw, Wifi, WifiOff } from 'lucide-react';
-import { getAllProfiles, updateProfileRole, registerUser } from '../services/authService';
+import { Users, MapPin, TrendingUp, UserCheck, Plus, Mail, Lock, X, RefreshCw, Wifi, WifiOff, Trash2 } from 'lucide-react';
+import { getAllProfiles, updateProfileRole, registerUser, deleteUser } from '../services/authService';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import useAppStore from '../store/useAppStore';
 import useCRMStore from '../store/useCRMStore';
@@ -24,6 +24,8 @@ export default function Team() {
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [updatingRole, setUpdatingRole] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // userId pending confirmation
+  const [deletingUser, setDeletingUser] = useState(null);
 
   // ── Load team ──────────────────────────────────────────────
   const loadTeam = async () => {
@@ -70,6 +72,21 @@ export default function Team() {
       }
     } finally {
       setUpdatingRole(null);
+    }
+  };
+
+  // ── Delete user ────────────────────────────────────────────
+  const handleDelete = async (profileId) => {
+    if (!isAdmin()) return;
+    setDeletingUser(profileId);
+    try {
+      await deleteUser(profileId);
+      setProfiles((prev) => prev.filter((p) => p.id !== profileId));
+      setConfirmDelete(null);
+    } catch (err) {
+      console.error('Error al eliminar usuario:', err);
+    } finally {
+      setDeletingUser(null);
     }
   };
 
@@ -227,9 +244,9 @@ export default function Team() {
                       </div>
                     </div>
 
-                    {/* Role toggle (admin only, not self) */}
+                    {/* Role toggle + delete (admin only, not self) */}
                     {isAdmin() && !isMe && (
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex flex-col items-end gap-2">
                         <select
                           value={p.role || 'seller'}
                           disabled={updatingRole === p.id}
@@ -239,6 +256,35 @@ export default function Team() {
                           <option value="seller">Vendedor</option>
                           <option value="admin">Admin</option>
                         </select>
+
+                        {confirmDelete === p.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-slate-500">¿Eliminar?</span>
+                            <button
+                              onClick={() => handleDelete(p.id)}
+                              disabled={deletingUser === p.id}
+                              className="text-[11px] font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
+                            >
+                              {deletingUser === p.id ? (
+                                <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin inline-block" />
+                              ) : 'Sí'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(null)}
+                              className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md transition-colors"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDelete(p.id)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Eliminar usuario"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
