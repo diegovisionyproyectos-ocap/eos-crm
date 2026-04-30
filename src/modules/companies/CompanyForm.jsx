@@ -114,6 +114,12 @@ export default function CompanyForm() {
       }
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
+        {isEditing && modalData?.code && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 rounded-lg border border-indigo-100">
+            <span className="text-xs text-slate-500">Código:</span>
+            <span className="text-sm font-mono font-bold text-indigo-600">{modalData.code}</span>
+          </div>
+        )}
         <Input
           label="Nombre del colegio *"
           placeholder="Colegio Los Andes"

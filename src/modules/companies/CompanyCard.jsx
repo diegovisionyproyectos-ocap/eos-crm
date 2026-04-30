@@ -32,7 +32,14 @@ export default function CompanyCard({ company }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
+                {company.code && (
+                  <span className="text-[10px] font-mono font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded flex-shrink-0">
+                    {company.code}
+                  </span>
+                )}
+              </div>
               {company.city && (
                 <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                   <MapPin size={10} />

@@ -17,6 +17,7 @@ export function companiesToGeoJSON(companies = [], opportunities = []) {
         geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
         properties: {
           id: c.id,
+          code: c.code || '',
           name: c.name,
           city: c.city,
           status: c.status,

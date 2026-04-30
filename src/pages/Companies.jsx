@@ -20,7 +20,11 @@ export default function Companies() {
   useEffect(() => { initialize(); }, []);
 
   const filtered = companies.filter((c) => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.city || '').toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const matchSearch = !search ||
+      c.name.toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q) ||
+      (c.code || '').toLowerCase().includes(q);
     const matchStatus = !statusFilter || c.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -122,7 +126,14 @@ export default function Companies() {
                   {getInitials(selectedCompany.name)}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{selectedCompany.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{selectedCompany.name}</p>
+                    {selectedCompany.code && (
+                      <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded flex-shrink-0">
+                        {selectedCompany.code}
+                      </span>
+                    )}
+                  </div>
                   <span
                     className="text-xs font-medium px-2 py-0.5 rounded-full"
                     style={{

@@ -342,7 +342,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     // School click → popup
     m.on('click', 'schools-point', (e) => {
       const feature = e.features[0];
-      const { name, city, status, student_count, opportunityValue, id } = feature.properties;
+      const { name, city, status, student_count, opportunityValue, id, code } = feature.properties;
       const coords = feature.geometry.coordinates.slice();
 
       if (popupRef.current) popupRef.current.remove();
@@ -352,7 +352,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
         className: 'eos-popup',
       })
         .setLngLat(coords)
-        .setHTML(buildPopupHTML({ name, city, status, student_count, opportunityValue }))
+        .setHTML(buildPopupHTML({ name, city, status, student_count, opportunityValue, code }))
         .addTo(m);
 
       // Notify parent
@@ -596,7 +596,7 @@ export default function MapView({ onCompanyClick, showControls = true }) {
 }
 
 // ── Popup HTML builder ───────────────────────────────────────────────────────
-function buildPopupHTML({ name, city, status, student_count, opportunityValue }) {
+function buildPopupHTML({ name, city, status, student_count, opportunityValue, code }) {
   const statusLabels = {
     active: { label: 'Cliente activo', color: '#22c55e' },
     prospect: { label: 'Prospecto', color: '#6366f1' },
@@ -612,7 +612,10 @@ function buildPopupHTML({ name, city, status, student_count, opportunityValue })
     <div style="font-family:Inter,sans-serif;padding:14px;min-width:220px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <div style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0"></div>
-        <strong style="font-size:13px;color:#0f172a;line-height:1.3">${name}</strong>
+        <div>
+          <strong style="font-size:13px;color:#0f172a;line-height:1.3;display:block">${name}</strong>
+          ${code ? `<span style="font-size:10px;font-family:monospace;color:#6366f1;font-weight:600;background:#eef2ff;padding:1px 5px;border-radius:4px">${code}</span>` : ''}
+        </div>
       </div>
       <div style="font-size:12px;color:#64748b;display:flex;flex-direction:column;gap:4px">
         ${city ? `<span>📍 ${city}</span>` : ''}
