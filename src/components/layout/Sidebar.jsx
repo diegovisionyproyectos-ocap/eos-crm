@@ -12,6 +12,7 @@ import {
   GraduationCap,
   UserCog,
   LogOut,
+  FileText,
 } from 'lucide-react';
 import clsx from 'clsx';
 import useAppStore from '../../store/useAppStore';
@@ -23,7 +24,8 @@ const NAV_ITEMS = [
   { to: '/mapa', label: 'Mapa', icon: Map },
   { to: '/colegios', label: 'Colegios', icon: Building2 },
   { to: '/contactos', label: 'Contactos', icon: Users },
-  { to: '/actividades', label: 'Actividades', icon: CalendarCheck },
+  { to: '/actividades',   label: 'Actividades',   icon: CalendarCheck },
+  { to: '/cotizaciones',  label: 'Cotizaciones',  icon: FileText },
 ];
 
 const ROLE_LABEL = { admin: 'Admin', seller: 'Vendedor' };

@@ -13,6 +13,8 @@ import Activities from './pages/Activities';
 import Settings from './pages/Settings';
 import Team from './pages/Team';
 import Expediente from './pages/Expediente';
+import Quotes from './pages/Quotes';
+import QuoteBuilder from './pages/QuoteBuilder';
 
 // Global modal forms
 import OpportunityForm from './modules/pipeline/OpportunityForm';
@@ -42,6 +44,9 @@ export default function App() {
         <Route path="/actividades" element={<AuthGuard><Activities /></AuthGuard>} />
         <Route path="/ajustes" element={<AuthGuard><Settings /></AuthGuard>} />
         <Route path="/expediente/:companyId" element={<AuthGuard><Expediente /></AuthGuard>} />
+        <Route path="/cotizaciones" element={<AuthGuard><Quotes /></AuthGuard>} />
+        <Route path="/cotizaciones/nueva" element={<AuthGuard><QuoteBuilder /></AuthGuard>} />
+        <Route path="/cotizaciones/:quoteId" element={<AuthGuard><QuoteBuilder /></AuthGuard>} />
 
         {/* Admin only */}
         <Route path="/equipo" element={<AuthGuard adminOnly><Team /></AuthGuard>} />

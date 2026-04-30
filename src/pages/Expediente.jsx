@@ -12,17 +12,20 @@ import useCRMStore from '../store/useCRMStore';
 import useAppStore from '../store/useAppStore';
 import { fetchDocuments, uploadDocument, deleteDocument, getDocumentUrl } from '../services/documentsService';
 import { fetchContracts, createContract, deleteContract } from '../services/contractsService';
+import { fetchQuotes, deleteQuote } from '../services/quotesService';
+import { QUOTE_STATUS } from './Quotes';
 import clsx from 'clsx';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'info',       label: 'Info general' },
-  { id: 'contactos',  label: 'Contactos' },
-  { id: 'contratos',  label: 'Contratos' },
-  { id: 'documentos', label: 'Documentos' },
-  { id: 'visitas',    label: 'Visitas' },
-  { id: 'notas',      label: 'Notas' },
+  { id: 'info',          label: 'Info general' },
+  { id: 'contactos',     label: 'Contactos' },
+  { id: 'cotizaciones',  label: 'Cotizaciones' },
+  { id: 'contratos',     label: 'Contratos' },
+  { id: 'documentos',    label: 'Documentos' },
+  { id: 'visitas',       label: 'Visitas' },
+  { id: 'notas',         label: 'Notas' },
 ];
 
 const CONTRACT_STATUS = {
@@ -64,6 +67,8 @@ export default function Expediente() {
   const [loadingDocs, setLoadingDocs]       = useState(false);
   const [showContractForm, setShowContractForm] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [quotes, setQuotes]                 = useState([]);
+  const [loadingQuotes, setLoadingQuotes]   = useState(false);
   const [notes, setNotes]                   = useState('');
   const [savingNotes, setSavingNotes]       = useState(false);
 
@@ -84,6 +89,8 @@ export default function Expediente() {
     fetchContracts(companyId).then((d) => { setContracts(d); setLoadingContracts(false); });
     setLoadingDocs(true);
     fetchDocuments(companyId).then((d) => { setDocuments(d); setLoadingDocs(false); });
+    setLoadingQuotes(true);
+    fetchQuotes(companyId).then((d) => { setQuotes(d); setLoadingQuotes(false); });
   }, [companyId]);
 
   const handleSaveNotes = async () => {
@@ -103,6 +110,14 @@ export default function Expediente() {
     await deleteContract(id);
     setContracts((prev) => prev.filter((c) => c.id !== id));
     addToast('Contrato eliminado');
+  };
+
+  const handleDeleteQuote = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm('¿Eliminar esta cotización?')) return;
+    await deleteQuote(id);
+    setQuotes((prev) => prev.filter((q) => q.id !== id));
+    addToast('Cotización eliminada');
   };
 
   const handleDeleteDoc = async (doc) => {
@@ -189,6 +204,8 @@ export default function Expediente() {
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400 flex-shrink-0">
+            <span>{quotes.length} cotizaciones</span>
+            <span>·</span>
             <span>{contracts.length} contratos</span>
             <span>·</span>
             <span>{documents.length} docs</span>
@@ -308,6 +325,75 @@ export default function Expediente() {
             </div>
           )}
         </SectionCard>
+      )}
+
+      {/* ── COTIZACIONES ── */}
+      {activeTab === 'cotizaciones' && (
+        <div>
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={() => navigate(`/cotizaciones/nueva?empresa=${companyId}`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={13} /> Nueva cotización
+            </button>
+          </div>
+
+          {loadingQuotes ? (
+            <LoadingRows />
+          ) : quotes.length === 0 ? (
+            <EmptySection icon={FileText} text="Sin cotizaciones registradas" />
+          ) : (
+            <div className="space-y-3">
+              {quotes.map((q) => {
+                const qs = QUOTE_STATUS[q.status] || QUOTE_STATUS.borrador;
+                const itemCount = q.crm_quote_items?.length ?? 0;
+                return (
+                  <div
+                    key={q.id}
+                    onClick={() => navigate(`/cotizaciones/${q.id}`)}
+                    className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 hover:shadow-md cursor-pointer transition-shadow group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <FileText size={16} className="text-indigo-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          {q.code && (
+                            <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                              {q.code}
+                            </span>
+                          )}
+                          <span
+                            className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: qs.bg, color: qs.color }}
+                          >
+                            {qs.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {formatRelativeTime(q.created_at)} · {itemCount} {itemCount === 1 ? 'producto' : 'productos'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-base font-bold text-slate-900">
+                          {formatCurrency(q.total)}
+                        </span>
+                        <button
+                          onClick={(e) => handleDeleteQuote(e, q.id)}
+                          className="p-1.5 text-slate-300 hover:text-red-400 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── CONTRATOS ── */}
