@@ -112,6 +112,9 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     m.addSource('osm-schools', {
       type: 'geojson',
       data: osmSchoolsRef.current,
+      cluster: true,
+      clusterMaxZoom: 12,
+      clusterRadius: 40,
     });
 
     // Clustered school markers
@@ -133,15 +136,6 @@ export default function MapView({ onCompanyClick, showControls = true }) {
     m.addSource('heatmap', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: [] },
-    });
-
-    // OSM Schools (all schools in El Salvador)
-    m.addSource('osm-schools', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-      cluster: true,
-      clusterMaxZoom: 12,
-      clusterRadius: 40,
     });
   };
 
@@ -243,21 +237,6 @@ export default function MapView({ onCompanyClick, showControls = true }) {
         'line-width': 2.5,
         'line-dasharray': [3, 2],
         'line-opacity': 0.7,
-      },
-    });
-
-    // --- OSM schools background layer (all El Salvador schools, gray) ---
-    m.addLayer({
-      id: 'osm-schools-point',
-      type: 'circle',
-      source: 'osm-schools',
-      layout: { visibility: 'visible' },
-      paint: {
-        'circle-color': '#cbd5e1',
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 14, 7],
-        'circle-stroke-width': 1,
-        'circle-stroke-color': '#94a3b8',
-        'circle-opacity': 0.7,
       },
     });
 
