@@ -1,4 +1,5 @@
-import { Building2, MapPin, Users, TrendingUp, ChevronRight } from 'lucide-react';
+import { Building2, MapPin, Users, TrendingUp, ChevronRight, FolderOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { formatStudents, formatCurrency, getInitials } from '../../utils/formatters';
 import { COMPANY_STATUS } from '../../utils/constants';
@@ -8,6 +9,7 @@ import useCRMStore from '../../store/useCRMStore';
 export default function CompanyCard({ company }) {
   const { openDetailPanel, setSelectedMapCompanyId } = useAppStore();
   const { getOpportunitiesByCompany } = useCRMStore();
+  const navigate = useNavigate();
 
   const statusInfo = COMPANY_STATUS[company.status] || COMPANY_STATUS.prospect;
   const opportunities = getOpportunitiesByCompany(company.id);
@@ -79,19 +81,31 @@ export default function CompanyCard({ company }) {
         </div>
       </div>
 
-      {/* Map link */}
-      {(company.lat && company.lng) && (
+      {/* Action buttons */}
+      <div className="mt-3 flex gap-2">
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setSelectedMapCompanyId(company.id);
+            navigate(`/expediente/${company.id}`);
           }}
-          className="mt-3 w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center gap-1 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+          className="flex-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center justify-center gap-1 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors border border-indigo-100"
         >
-          <MapPin size={12} />
-          Ver en mapa
+          <FolderOpen size={12} />
+          Expediente
         </button>
-      )}
+        {company.lat && company.lng && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedMapCompanyId(company.id);
+            }}
+            className="flex-1 text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center justify-center gap-1 py-1.5 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"
+          >
+            <MapPin size={12} />
+            Ver mapa
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Building2, X, MapPin, Users, Pencil, Trash2, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Building2, X, MapPin, Users, Pencil, Trash2, Star, FolderOpen } from 'lucide-react';
 import Layout from '../components/layout/Layout';
 import CompanyCard from '../modules/companies/CompanyCard';
 import CompanyForm from '../modules/companies/CompanyForm';
@@ -14,6 +15,7 @@ import useAppStore from '../store/useAppStore';
 export default function Companies() {
   const { companies, opportunities, initialize, removeCompany, removeContact } = useCRMStore();
   const { openModal, detailPanel, openDetailPanel, closeDetailPanel, addToast } = useAppStore();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -276,25 +278,35 @@ export default function Companies() {
             </div>
 
             {/* Actions */}
-            <div className="px-5 py-3 border-t border-slate-100 flex gap-2">
+            <div className="px-5 py-3 border-t border-slate-100 space-y-2">
               <Button
-                variant="secondary"
                 size="sm"
-                icon={Pencil}
-                className="flex-1"
-                onClick={() => openModal('companyForm', selectedCompany)}
+                icon={FolderOpen}
+                className="w-full"
+                onClick={() => navigate(`/expediente/${selectedCompany.id}`)}
               >
-                Editar
+                Ver expediente
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Trash2}
-                onClick={() => handleDelete(selectedCompany.id)}
-                className="text-red-500 border-red-200 hover:bg-red-50"
-              >
-                Eliminar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Pencil}
+                  className="flex-1"
+                  onClick={() => openModal('companyForm', selectedCompany)}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => handleDelete(selectedCompany.id)}
+                  className="text-red-500 border-red-200 hover:bg-red-50"
+                >
+                  Eliminar
+                </Button>
+              </div>
             </div>
           </div>
         )}
